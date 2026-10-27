@@ -1,0 +1,13 @@
+services:
+  - type: worker
+    name: timi-bot
+    runtime: docker
+    plan: starter
+    region: singapore
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeploy: true
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
