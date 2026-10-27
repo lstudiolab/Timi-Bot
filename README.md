@@ -1,63 +1,63 @@
 # Timi
 
-Timi is a Discord bot written in C++20 using [D++ (DPP)](https://github.com/brainboxdotcc/DPP).
+Timi is a Discord bot using Python and discord.py. The repository is configured for a Render **Web Service** with an HTTP health endpoint.
 
 ## Current commands
 
-- `/ping` — checks that Timi is responding.
-- `/about` — describes the bot and planned systems.
-- `/help` — lists available commands.
+- `/ping` — checks whether Timi is responding.
+- `/about` — describes Timi.
+- `/help` — lists the current commands.
 
-## Repository layout
-
-- `src/main.cpp` — bot startup and slash-command handlers.
-- `CMakeLists.txt` — C++20 build and DPP dependency.
-- `Dockerfile` — multi-stage container build.
-- `render.yaml` — Render Blueprint for a persistent worker.
-- `.github/workflows/build.yml` — Linux build check on pushes and pull requests.
-- `.env.example` — placeholder showing the required environment variable.
+The moderation, ticket, and other server systems are not implemented yet.
 
 ## Run locally
 
-Requirements: CMake 3.20+, a C++20 compiler, Git, and the development libraries required by DPP.
+Requires Python 3.10 or newer.
 
-1. Copy `.env.example` to `.env` and replace the placeholder with your Discord bot token.
-2. Export the variable in your terminal (do not commit the real token).
-3. Build and run:
+1. Install dependencies:
 
-```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
-export DISCORD_TOKEN="your-bot-token"
-./build/timi
-```
+   ```sh
+   python -m pip install -r requirements.txt
+   ```
 
-Never paste your real Discord token into source code, GitHub, screenshots, or public chat. If a token has been exposed, reset it in the Discord Developer Portal.
+2. Set `DISCORD_TOKEN` in your environment. Never commit the real token.
+
+   macOS/Linux:
+   ```sh
+   export DISCORD_TOKEN="your-bot-token"
+   python app.py
+   ```
+
+   Windows PowerShell:
+   ```powershell
+   $env:DISCORD_TOKEN="your-bot-token"
+   python app.py
+   ```
 
 ## Discord application setup
 
 1. Open the [Discord Developer Portal](https://discord.com/developers/applications).
-2. Create an application named **Timi**, then open its **Bot** page and create the bot user.
-3. Copy the bot token and store it as the `DISCORD_TOKEN` secret in your host. Do not share it in chat.
-4. Under **OAuth2 → URL Generator**, select `bot` and `applications.commands`.
-5. For the current starter commands, grant only the permissions needed to view channels and use application commands / send interaction responses. Avoid granting Administrator unless a feature specifically requires it.
-6. Open the generated invite URL and add Timi to your test server.
-
-The current code uses default intents and does not yet require the privileged Message Content or Server Members intents.
+2. Create or select the Timi application and create its bot user.
+3. Copy the token and add it in Render as the secret environment variable `DISCORD_TOKEN`. Do not share it in chat or commit it to GitHub.
+4. Under OAuth2 URL Generator, select `bot` and `applications.commands`.
+5. Invite Timi to your test server. Grant only the permissions required by features actually enabled.
 
 ## Deploy on Render
 
-The repository includes a Blueprint at [render.yaml](./render.yaml). Open the [Render Blueprint dashboard](https://dashboard.render.com/blueprints), connect this repository, review the worker plan and any charges, set `DISCORD_TOKEN` as a secret environment variable, and apply it.
+The `render.yaml` Blueprint describes a free Python Web Service in Singapore. Connect this repository in Render and apply the Blueprint, or create a Web Service from this repository using:
 
-A Discord gateway bot needs a continuously running process. Use a **Background Worker**, not a scheduled Cron Job. The Blueprint currently specifies the paid `starter` worker plan; review the current price in Render before creating it. The connected Render integration available to this project cannot create a background worker directly, so the Blueprint must be applied in the dashboard.
+- Runtime: Python
+- Build command: `pip install -r requirements.txt`
+- Start command: `python app.py`
+- Health check path: `/health`
+- Environment variable: `DISCORD_TOKEN` (secret)
+
+The HTTP endpoint and Discord Gateway client run in the same Python process. **Important:** Render's free Web Service can spin down after inactivity, so this does not guarantee that Gateway-based bot features work continuously 24/7. Do not use external pings to bypass Render's free-instance sleep policy. A paid Background Worker is the better fit for an always-on Gateway bot.
 
 ## Roadmap
 
-- Per-server configuration and persistent storage
-- Welcome and leave messages
-- Embed builder and interactive buttons
-- Ticket panels, ticket channels, and transcripts
-- Moderation and role utilities
-- Permission checks, audit logging, and safer configuration flows
-
-Features are added in stages; the roadmap items are not implemented yet.
+- Moderation configuration and logs
+- Spam detection and raid response
+- Bot join approval
+- Mention, webhook, account-age, and naming protection
+- Ticket system, embeds, buttons, and per-server settings
