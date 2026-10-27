@@ -1,63 +1,63 @@
-# Timi
+# Timi Bot
 
-Timi is a Discord bot using Python and discord.py. The repository is configured for a Render **Web Service** with an HTTP health endpoint.
+Timi is a Python Discord bot built with `discord.py` and an HTTP health endpoint for Render.
 
-## Current commands
+## Current behavior
 
-- `/ping` — checks whether Timi is responding.
-- `/about` — describes Timi.
-- `/help` — lists the current commands.
+- Creates or reuses a private `#timi` channel when the bot is in a server.
+- Provides moderation event handlers for spam, rapid mentions, webhook mass mentions, new-account age checks, suspicious long messages, name filtering, channel deletion recovery, and join-raid detection.
+- Requests owner review for certain moderation events using buttons in the private channel.
+- Runs a `/health` endpoint for Render health checks.
 
-The moderation, ticket, and other server systems are not implemented yet.
+**Slash commands are currently disabled while the bot's command system is being redesigned.** Do not expect `/ping`, `/about`, `/help`, or `/moderationconfig` to be registered.
+
+## Requirements
+
+- Python 3.10+
+- A Discord application and bot user
+- A Discord bot token stored as the `DISCORD_TOKEN` environment variable
+- The Server Members and Message Content privileged intents enabled in the Discord Developer Portal for the relevant features
 
 ## Run locally
 
-Requires Python 3.10 or newer.
+Install dependencies:
 
-1. Install dependencies:
+```sh
+python -m pip install -r requirements.txt
+```
 
-   ```sh
-   python -m pip install -r requirements.txt
-   ```
+Set the token as an environment variable; never commit it to GitHub or paste it into chat.
 
-2. Set `DISCORD_TOKEN` in your environment. Never commit the real token.
+macOS/Linux:
 
-   macOS/Linux:
-   ```sh
-   export DISCORD_TOKEN="your-bot-token"
-   python app.py
-   ```
+```sh
+export DISCORD_TOKEN="your-bot-token"
+python app.py
+```
 
-   Windows PowerShell:
-   ```powershell
-   $env:DISCORD_TOKEN="your-bot-token"
-   python app.py
-   ```
+Windows PowerShell:
 
-## Discord application setup
-
-1. Open the [Discord Developer Portal](https://discord.com/developers/applications).
-2. Create or select the Timi application and create its bot user.
-3. Copy the token and add it in Render as the secret environment variable `DISCORD_TOKEN`. Do not share it in chat or commit it to GitHub.
-4. Under OAuth2 URL Generator, select `bot` and `applications.commands`.
-5. Invite Timi to your test server. Grant only the permissions required by features actually enabled.
+```powershell
+$env:DISCORD_TOKEN="your-bot-token"
+python app.py
+```
 
 ## Deploy on Render
 
-The `render.yaml` Blueprint describes a free Python Web Service in Singapore. Connect this repository in Render and apply the Blueprint, or create a Web Service from this repository using:
+The `render.yaml` Blueprint defines a free Python Web Service in Singapore.
 
-- Runtime: Python
 - Build command: `pip install -r requirements.txt`
 - Start command: `python app.py`
 - Health check path: `/health`
-- Environment variable: `DISCORD_TOKEN` (secret)
+- Required environment variable: `DISCORD_TOKEN` (secret)
 
-The HTTP endpoint and Discord Gateway client run in the same Python process. **Important:** Render's free Web Service can spin down after inactivity, so this does not guarantee that Gateway-based bot features work continuously 24/7. Do not use external pings to bypass Render's free-instance sleep policy. A paid Background Worker is the better fit for an always-on Gateway bot.
+The HTTP health endpoint and Discord Gateway client run in one process. Render's free Web Service may spin down after inactivity, so it is not a reliable always-on host for a Discord Gateway bot. Do not use external pings to bypass the free-instance sleep policy.
 
-## Roadmap
+## Important limitations
 
-- Moderation configuration and logs
-- Spam detection and raid response
-- Bot join approval
-- Mention, webhook, account-age, and naming protection
-- Ticket system, embeds, buttons, and per-server settings
+- Per-server settings and tracking data are currently held in memory and reset when the process restarts.
+- Channel deletion recovery can recreate a channel, but Discord does not restore deleted message history or every original permission override.
+- Join-raid handling raises the server verification level temporarily; it is not a complete server-wide lock.
+- Discord does not support revoking one member's ability to mention only one specific target; Timi uses timeout-based handling for rapid mention spam.
+- Login HTTP 429 responses are logged with available rate-limit headers and response details. Timi deliberately does not automatically retry a rate-limited initial login; investigate the response before restarting the service.
+- Moderation actions depend on the bot's role hierarchy, permissions, enabled privileged intents, and Discord API availability.
