@@ -72,15 +72,15 @@ def config_embed(gid):
     return e
 
 class SettingsModal(discord.ui.Modal, title="Edit moderation settings"):
-    timeout = discord.ui.TextInput(label="Timeout duration (minutes)", default="10", max_length=5)
+    timeout_min = discord.ui.TextInput(label="Timeout duration (minutes)", default="10", max_length=5)
     action_duration = discord.ui.TextInput(label="Action duration (minutes)", default="10", max_length=5)
     threshold = discord.ui.TextInput(label="Max messages per minute", default="20", max_length=3)
     def __init__(self, gid):
         super().__init__(); self.gid = gid; c=conf(gid)
-        self.timeout.default=str(c["timeout"]); self.action_duration.default=str(c["action_duration"]); self.threshold.default=str(c["threshold"])
+        self.timeout_min.default=str(c["timeout"]); self.action_duration.default=str(c["action_duration"]); self.threshold.default=str(c["threshold"])
     async def on_submit(self, interaction):
         try:
-            a,b,d=int(self.timeout.value),int(self.action_duration.value),int(self.threshold.value)
+            a,b,d=int(self.timeout_min.value),int(self.action_duration.value),int(self.threshold.value)
             if not (1<=a<=40320 and 1<=b<=40320 and 5<=d<=100): raise ValueError
         except ValueError:
             return await interaction.response.send_message("Enter whole numbers: durations 1–40320 minutes; threshold 5–100.", ephemeral=True)
@@ -312,9 +312,8 @@ def retry_delay(e):
     return max(wait, 60) + random.uniform(1, 5)
 
 async def run_bot():
-    # Let discord.py manage gateway reconnects. Login-level HTTP 429 is different:
-    # repeated login attempts can extend Discord's global rate limit, so wait once
-    # for the server-specified Retry-After and make one controlled retry at a time.
+    # Discord's global login rate limit can worsen when the client retries too quickly.
+    # Never retry a login 429 sooner than 10 minutes, even if Retry-After is shorter.
     while not bot.is_closed():
         try:
             await bot.start(TOKEN, reconnect=True)
@@ -322,8 +321,8 @@ async def run_bot():
         except discord.HTTPException as e:
             if e.status != 429:
                 raise
-            delay = retry_delay(e)
-            log.warning("Discord login is rate-limited; sleeping %.1f seconds before a single retry.", delay)
+            delay = max(retry_delay(e), 600) + random.uniform(1, 5)
+            log.warning("Discord login is rate-limited; waiting at least 10 minutes (%.1f seconds) before retrying.", delay)
             await asyncio.sleep(delay)
         except (discord.LoginFailure, discord.PrivilegedIntentsRequired):
             log.exception("Discord rejected the token or required intents; stopping instead of retrying forever.")
