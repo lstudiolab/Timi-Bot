@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import random
 from typing import Awaitable, Callable, TypeVar
 
 import discord
@@ -13,7 +14,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("timi")
 
-TOKEN = os.getenv("DISCORD_TOKEN")
+TOKEN = os.getenv("DISCORD_TOKEN", "").strip()
 PORT = int(os.getenv("PORT", "10000"))
 
 intents = discord.Intents.default()
@@ -21,6 +22,7 @@ bot = discord.Client(intents=intents)
 tree = app_commands.CommandTree(bot)
 
 T = TypeVar("T")
+_commands_synced = False
 
 
 @tree.command(name="ping", description="Check whether Timi is responding.")
@@ -58,23 +60,33 @@ async def help_command(interaction: discord.Interaction):
 
 @bot.event
 async def on_ready():
+    global _commands_synced
     log.info(
         "Connected to Discord as %s (ID: %s)",
         bot.user,
         bot.user.id if bot.user else "unknown",
     )
+    if not _commands_synced:
+        try:
+            synced = await with_rate_limit_backoff("slash-command sync", tree.sync)
+            _commands_synced = True
+            log.info("Successfully synced %d global slash commands.", len(synced))
+        except Exception:
+            log.exception("Slash-command synchronization failed.")
+            # Keep the bot connected even if command registration fails.
+            # A later reconnect can retry synchronization.
 
 
 async def health(_request: web.Request) -> web.Response:
-    connected = bot.is_ready()
+    # This endpoint reports process health to Render. Keep it HTTP 200 while the
+    # process is alive so a Discord API rate limit doesn't cause health-check restarts.
     return web.json_response(
         {
             "service": "timi",
-            "status": "ok" if connected else "starting",
-            "discord_connected": connected,
+            "status": "ok",
+            "discord_connected": bot.is_ready(),
             "bot_user": str(bot.user) if bot.user else None,
-        },
-        status=200 if connected else 503,
+        }
     )
 
 
@@ -104,7 +116,7 @@ async def with_rate_limit_backoff(
     label: str,
     operation: Callable[[], Awaitable[T]],
 ) -> T:
-    """Retry Discord HTTP 429 responses without crashing/restarting the service."""
+    """Honor Discord's Retry-After header and avoid rapid retries on HTTP 429."""
     backoff = 60.0
     while True:
         try:
@@ -122,30 +134,54 @@ async def with_rate_limit_backoff(
                 except (TypeError, ValueError):
                     continue
 
-            # Never hammer Discord if the server omits the retry delay.
-            wait_seconds = min(max(retry_after, backoff, 30.0), 900.0)
+            # Honor Discord's full delay; do not cap it and retry too early.
+            wait_seconds = max(retry_after, backoff, 30.0) + random.uniform(1.0, 5.0)
+            is_global = str(headers.get("X-RateLimit-Global", "")).lower() == "true"
+            scope = "global" if is_global else "route or global"
             log.warning(
-                "Discord returned HTTP 429 during %s. Waiting %.0f seconds before retrying; "
-                "the service will remain running.",
+                "Discord HTTP 429 during %s (%s limit). Retry-After=%s; "
+                "waiting %.1f seconds before retry. No token value is logged.",
                 label,
+                scope,
+                headers.get("Retry-After", "not supplied"),
                 wait_seconds,
             )
             await asyncio.sleep(wait_seconds)
-            backoff = min(backoff * 2, 900.0)
+            backoff = min(backoff * 2, 3600.0)
+
+
+async def run_discord() -> None:
+    # Use the documented Client lifecycle. If a transient API limit occurs during
+    # login, retry login only after Discord's indicated wait instead of crashing.
+    while True:
+        try:
+            await bot.start(TOKEN, reconnect=True)
+            return
+        except discord.HTTPException as error:
+            if error.status != 429:
+                raise
+            await with_rate_limit_backoff("Discord login", lambda: _raise_same(error))
+        except discord.LoginFailure:
+            log.exception(
+                "Discord rejected the bot token. Verify DISCORD_TOKEN in Render "
+                "is the bot token from Discord Developer Portal; do not paste it into logs."
+            )
+            raise
+
+
+async def _raise_same(error: Exception):
+    raise error
 
 
 async def main():
     if not TOKEN:
         raise RuntimeError(
-            "DISCORD_TOKEN is missing. Add it as a secret environment variable in Render."
+            "DISCORD_TOKEN is missing or empty. Add it as a secret environment variable in Render."
         )
 
     runner = await run_web_server()
     try:
-        # Keep login and command sync separate so a temporary 429 can be retried safely.
-        await with_rate_limit_backoff("Discord login", lambda: bot.login(TOKEN))
-        await with_rate_limit_backoff("slash-command sync", tree.sync)
-        await bot.connect(reconnect=True)
+        await run_discord()
     finally:
         await bot.close()
         await runner.cleanup()
