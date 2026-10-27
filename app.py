@@ -1,4 +1,4 @@
-import asyncio, logging, os, random, time
+import asyncio, logging, os, time
 from collections import defaultdict, deque
 from datetime import timedelta
 import discord
@@ -18,7 +18,6 @@ sent_messages = defaultdict(lambda: defaultdict(lambda: defaultdict(deque)))
 mention_windows = defaultdict(lambda: defaultdict(deque))
 join_events = defaultdict(deque)
 raid_locks = set()
-synced = False
 
 def conf(gid):
     return settings.setdefault(gid, {"enabled": True, "timeout": 10, "action_duration": 10, "threshold": 20, "log_channel": None})
@@ -100,18 +99,13 @@ class BotApproval(discord.ui.View):
 
 @bot.event
 async def on_ready():
-    global synced
-    log.info("Connected to Discord as %s (ID %s)",bot.user,bot.user.id if bot.user else "?")
-    for g in bot.guilds: await private_channel(g)
-    if not synced:
+    # discord.Client has no command tree; do not attempt slash-command sync here.
+    log.info("Connected to Discord as %s (ID %s)", bot.user, bot.user.id if bot.user else "?")
+    for guild in bot.guilds:
         try:
-            # Clear previously registered global slash commands while Timi's system is being redesigned.
-            bot.tree.clear_commands(guild=None)
-            await bot.tree.sync()
-            synced=True
-            log.info("Global slash commands cleared")
+            await private_channel(guild)
         except Exception:
-            log.exception("Could not clear global slash commands")
+            log.exception("Startup setup failed for guild %s", guild.id)
 
 @bot.event
 async def on_guild_join(guild): await private_channel(guild)
@@ -246,31 +240,32 @@ async def web_server():
     runner=web.AppRunner(app); await runner.setup(); await web.TCPSite(runner,"0.0.0.0",PORT).start()
     log.info("HTTP server listening on port %s",PORT); return runner
 
-def retry_delay(e):
-    headers = getattr(getattr(e, "response", None), "headers", {}) or {}
-    try:
-        wait = float(headers.get("Retry-After", 0))
-    except (TypeError, ValueError):
-        wait = 0
-    # Respect Discord's Retry-After; add only a small jitter to avoid synchronized retries.
-    return max(wait, 60) + random.uniform(1, 5)
-
 async def run_bot():
-    # Discord's global login rate limit can worsen when the client retries too quickly.
-    # Never retry a login 429 sooner than 10 minutes, even if Retry-After is shorter.
-    while not bot.is_closed():
-        try:
-            await bot.start(TOKEN, reconnect=True)
-            return
-        except discord.HTTPException as e:
-            if e.status != 429:
-                raise
-            delay = max(retry_delay(e), 600) + random.uniform(1, 5)
-            log.warning("Discord login is rate-limited; waiting at least 10 minutes (%.1f seconds) before retrying.", delay)
-            await asyncio.sleep(delay)
-        except (discord.LoginFailure, discord.PrivilegedIntentsRequired):
-            log.exception("Discord rejected the token or required intents; stopping instead of retrying forever.")
+    # Make exactly one initial login attempt. Automatic retries after a login 429 can
+    # compound an existing limit and hide the response needed to diagnose it.
+    try:
+        await bot.start(TOKEN, reconnect=True)
+    except discord.HTTPException as e:
+        if e.status != 429:
+            log.exception("Discord HTTP error while starting the bot (status %s).", e.status)
             raise
+        response = getattr(e, "response", None)
+        headers = getattr(response, "headers", {}) or {}
+        retry_after = headers.get("Retry-After", "not provided")
+        scope = headers.get("X-RateLimit-Scope", "not provided")
+        global_limit = headers.get("X-RateLimit-Global", "not provided")
+        log.error(
+            "Discord rejected the initial login with HTTP 429. Retry-After=%s; "
+            "X-RateLimit-Scope=%s; X-RateLimit-Global=%s; response=%s. "
+            "No automatic login retry will be attempted. Inspect the limit before restarting.",
+            retry_after, scope, global_limit, getattr(e, "text", "no response body"),
+        )
+        # Keep the health endpoint alive for diagnosis, without repeatedly hitting Discord.
+        while not bot.is_closed():
+            await asyncio.sleep(3600)
+    except (discord.LoginFailure, discord.PrivilegedIntentsRequired):
+        log.exception("Discord rejected the token or required intents; fix the configuration before restarting.")
+        raise
 
 async def main():
     if not TOKEN: raise RuntimeError("DISCORD_TOKEN is missing; set it in Render environment variables.")
