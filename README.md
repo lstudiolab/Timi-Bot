@@ -2,45 +2,62 @@
 
 Timi is a Discord bot written in C++20 using [D++ (DPP)](https://github.com/brainboxdotcc/DPP).
 
-## Current starter features
+## Current commands
 
-- Connects to Discord using the `DISCORD_TOKEN` environment variable.
-- Registers a global `/ping` slash command.
-- Replies to `/ping` with a basic health response.
-- Uses CMake and Docker for repeatable builds.
-- Includes a Render Blueprint for a persistent background worker in Singapore.
+- `/ping` — checks that Timi is responding.
+- `/about` — describes the bot and planned systems.
+- `/help` — lists available commands.
+
+## Repository layout
+
+- `src/main.cpp` — bot startup and slash-command handlers.
+- `CMakeLists.txt` — C++20 build and DPP dependency.
+- `Dockerfile` — multi-stage container build.
+- `render.yaml` — Render Blueprint for a persistent worker.
+- `.github/workflows/build.yml` — Linux build check on pushes and pull requests.
+- `.env.example` — placeholder showing the required environment variable.
 
 ## Run locally
 
 Requirements: CMake 3.20+, a C++20 compiler, Git, and the development libraries required by DPP.
 
+1. Copy `.env.example` to `.env` and replace the placeholder with your Discord bot token.
+2. Export the variable in your terminal (do not commit the real token).
+3. Build and run:
+
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
-DISCORD_TOKEN="your-bot-token" ./build/timi
+export DISCORD_TOKEN="your-bot-token"
+./build/timi
 ```
 
-Never commit your Discord token. Set it as an environment variable or a secret in your hosting provider.
+Never paste your real Discord token into source code, GitHub, screenshots, or public chat. If a token has been exposed, reset it in the Discord Developer Portal.
+
+## Discord application setup
+
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications).
+2. Create an application named **Timi**, then open its **Bot** page and create the bot user.
+3. Copy the bot token and store it as the `DISCORD_TOKEN` secret in your host. Do not share it in chat.
+4. Under **OAuth2 → URL Generator**, select `bot` and `applications.commands`.
+5. For the current starter commands, grant only the permissions needed to view channels and use application commands / send interaction responses. Avoid granting Administrator unless a feature specifically requires it.
+6. Open the generated invite URL and add Timi to your test server.
+
+The current code uses default intents and does not yet require the privileged Message Content or Server Members intents.
 
 ## Deploy on Render
 
-1. Open the Render Blueprint page: https://dashboard.render.com/blueprints
-2. Create a Blueprint instance from this repository.
-3. Set `DISCORD_TOKEN` when prompted. Keep it secret.
-4. Review the service plan and any charges before applying.
-5. Apply the Blueprint and check the worker logs.
+The repository includes a Blueprint at [render.yaml](./render.yaml). Open the [Render Blueprint dashboard](https://dashboard.render.com/blueprints), connect this repository, review the worker plan and any charges, set `DISCORD_TOKEN` as a secret environment variable, and apply it.
 
-The Blueprint uses a paid `starter` worker plan because a gateway-connected Discord bot must stay running. Review current Render pricing before deployment.
-
-## Invite permissions
-
-Create an application in the Discord Developer Portal, add a bot, and enable the `bot` and `applications.commands` OAuth2 scopes when generating an invite. The starter only needs permission to use application commands and send interaction responses.
+A Discord gateway bot needs a continuously running process. Use a **Background Worker**, not a scheduled Cron Job. The Blueprint currently specifies the paid `starter` worker plan; review the current price in Render before creating it. The connected Render integration available to this project cannot create a background worker directly, so the Blueprint must be applied in the dashboard.
 
 ## Roadmap
 
-- Per-server configuration storage
-- Welcome channel and customizable greeting messages
-- Embed builder and component buttons
-- Ticket system
+- Per-server configuration and persistent storage
+- Welcome and leave messages
+- Embed builder and interactive buttons
+- Ticket panels, ticket channels, and transcripts
 - Moderation and role utilities
-- Persistent database support
+- Permission checks, audit logging, and safer configuration flows
+
+Features are added in stages; the roadmap items are not implemented yet.
