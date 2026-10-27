@@ -1,12 +1,13 @@
 services:
-  - type: worker
+  - type: web
     name: timi-bot
-    runtime: docker
-    plan: starter
+    runtime: python
+    plan: free
     region: singapore
     branch: main
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    healthCheckPath: /health
     autoDeploy: true
     envVars:
       - key: DISCORD_TOKEN
