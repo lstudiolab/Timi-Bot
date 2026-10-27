@@ -26,9 +26,22 @@ def conf(gid):
     return settings.setdefault(gid, {"enabled": True, "timeout": 10, "action_duration": 10, "threshold": 20, "log_channel": None})
 
 async def private_channel(guild):
-    ch = guild.get_channel(private_channels.get(guild.id, 0))
-    if ch: return ch
-    owner = guild.owner or await bot.fetch_user(guild.owner_id)
+    # Reuse the channel after restarts/reconnects instead of creating duplicates.
+    cached_id = private_channels.get(guild.id)
+    ch = guild.get_channel(cached_id) if cached_id else None
+    if ch:
+        return ch
+    ch = discord.utils.get(guild.text_channels, name="timi")
+    if ch and ch.topic == "Private Timi moderation and security console":
+        private_channels[guild.id] = ch.id
+        return ch
+    owner = guild.owner
+    if owner is None:
+        try:
+            owner = await bot.fetch_user(guild.owner_id)
+        except discord.HTTPException:
+            log.exception("Unable to fetch guild owner; cannot create private Timi channel")
+            return None
     overwrites = {guild.default_role: discord.PermissionOverwrite(view_channel=False)}
     if guild.me:
         overwrites[guild.me] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True, manage_messages=True)
@@ -206,7 +219,20 @@ async def on_message(m):
         await report(m.guild,discord.Embed(title="Webhook mass mention blocked",description=f"Deleted a webhook message attempting to ping everyone in {m.channel.mention}.",color=discord.Color.red()))
         return
     if m.author.bot or not c["enabled"]: return
-    now=time.monotonic(); q=sent_messages[m.guild.id][m.channel.id][m.author.id]
+    now=time.monotonic()
+    # Bound the tracking map: discard expired/empty user queues and stale channels.
+    guild_queues = sent_messages[m.guild.id]
+    for channel_id in list(guild_queues):
+        users = guild_queues[channel_id]
+        for user_id in list(users):
+            queue = users[user_id]
+            while queue and now - queue[0][0] > 60:
+                queue.popleft()
+            if not queue:
+                users.pop(user_id, None)
+        if not users:
+            guild_queues.pop(channel_id, None)
+    q=sent_messages[m.guild.id][m.channel.id][m.author.id]
     q.append((now,m.id))
     while q and now-q[0][0]>60: q.popleft()
     if len(q)>=c["threshold"]:
@@ -224,7 +250,13 @@ async def on_message(m):
         await report(m.guild,e,DecisionView(m.author.id)); q.clear(); return
     # Five mention-containing messages in three seconds: timeout is supported; selective per-target revocation is not.
     if m.mentions:
-        mq=mention_windows[m.guild.id][m.author.id]; mq.append(now)
+        guild_mentions = mention_windows[m.guild.id]
+        for user_id in list(guild_mentions):
+            while guild_mentions[user_id] and now - guild_mentions[user_id][0] > 3:
+                guild_mentions[user_id].popleft()
+            if not guild_mentions[user_id]:
+                guild_mentions.pop(user_id, None)
+        mq=guild_mentions[m.author.id]; mq.append(now)
         while mq and now-mq[0]>3: mq.popleft()
         if len(mq)>=5 and isinstance(m.author,discord.Member):
             try:
@@ -271,19 +303,31 @@ async def web_server():
     log.info("HTTP server listening on port %s",PORT); return runner
 
 def retry_delay(e):
-    headers=getattr(getattr(e,"response",None),"headers",{}) or {}
-    try: wait=float(headers.get("Retry-After",0))
-    except (TypeError,ValueError): wait=0
-    wait=max(wait,60)+random.uniform(1,5)
-    log.warning("Discord HTTP 429 during startup/login; waiting %.1f seconds.",wait)
-    return wait
+    headers = getattr(getattr(e, "response", None), "headers", {}) or {}
+    try:
+        wait = float(headers.get("Retry-After", 0))
+    except (TypeError, ValueError):
+        wait = 0
+    # Respect Discord's Retry-After; add only a small jitter to avoid synchronized retries.
+    return max(wait, 60) + random.uniform(1, 5)
 
 async def run_bot():
-    while True:
-        try: await bot.start(TOKEN,reconnect=True); return
+    # Let discord.py manage gateway reconnects. Login-level HTTP 429 is different:
+    # repeated login attempts can extend Discord's global rate limit, so wait once
+    # for the server-specified Retry-After and make one controlled retry at a time.
+    while not bot.is_closed():
+        try:
+            await bot.start(TOKEN, reconnect=True)
+            return
         except discord.HTTPException as e:
-            if e.status!=429: raise
-            await asyncio.sleep(retry_delay(e))
+            if e.status != 429:
+                raise
+            delay = retry_delay(e)
+            log.warning("Discord login is rate-limited; sleeping %.1f seconds before a single retry.", delay)
+            await asyncio.sleep(delay)
+        except (discord.LoginFailure, discord.PrivilegedIntentsRequired):
+            log.exception("Discord rejected the token or required intents; stopping instead of retrying forever.")
+            raise
 
 async def main():
     if not TOKEN: raise RuntimeError("DISCORD_TOKEN is missing; set it in Render environment variables.")
