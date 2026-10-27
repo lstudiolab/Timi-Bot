@@ -3,7 +3,6 @@ from collections import defaultdict, deque
 from datetime import timedelta
 import discord
 from aiohttp import web
-from discord import app_commands
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper(), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("timi")
@@ -13,7 +12,6 @@ intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
 bot = discord.Client(intents=intents)
-tree = app_commands.CommandTree(bot)
 settings = {}
 private_channels = {}
 sent_messages = defaultdict(lambda: defaultdict(lambda: defaultdict(deque)))
@@ -59,66 +57,6 @@ async def report(guild, embed, view=None):
     if ch:
         try: await ch.send(embed=embed, view=view)
         except discord.HTTPException: log.exception("Unable to send moderation report")
-
-def config_embed(gid):
-    c = conf(gid); g = bot.get_guild(gid)
-    ch = g.get_channel(c["log_channel"]) if g and c["log_channel"] else None
-    e = discord.Embed(title="Timi Moderation", color=discord.Color.from_rgb(90,90,96))
-    e.description = "Moderation is **" + ("enabled" if c["enabled"] else "disabled") + "**."
-    e.add_field(name="Timeout duration", value=f"{c['timeout']} minutes")
-    e.add_field(name="Action duration", value=f"{c['action_duration']} minutes")
-    e.add_field(name="Spam threshold", value=f"{c['threshold']} messages/minute/channel")
-    e.add_field(name="Log channel", value=ch.mention if ch else "Private #timi (default)", inline=False)
-    return e
-
-class SettingsModal(discord.ui.Modal, title="Edit moderation settings"):
-    timeout_min = discord.ui.TextInput(label="Timeout duration (minutes)", default="10", max_length=5)
-    action_duration = discord.ui.TextInput(label="Action duration (minutes)", default="10", max_length=5)
-    threshold = discord.ui.TextInput(label="Max messages per minute", default="20", max_length=3)
-    def __init__(self, gid):
-        super().__init__(); self.gid = gid; c=conf(gid)
-        self.timeout_min.default=str(c["timeout"]); self.action_duration.default=str(c["action_duration"]); self.threshold.default=str(c["threshold"])
-    async def on_submit(self, interaction):
-        try:
-            a,b,d=int(self.timeout_min.value),int(self.action_duration.value),int(self.threshold.value)
-            if not (1<=a<=40320 and 1<=b<=40320 and 5<=d<=100): raise ValueError
-        except ValueError:
-            return await interaction.response.send_message("Enter whole numbers: durations 1–40320 minutes; threshold 5–100.", ephemeral=True)
-        conf(self.gid).update(timeout=a, action_duration=b, threshold=d)
-        await interaction.response.send_message("Settings saved for this running instance.", ephemeral=True)
-
-class LogChannelSelect(discord.ui.ChannelSelect):
-    def __init__(self,gid): super().__init__(channel_types=[discord.ChannelType.text],placeholder="Choose log channel"); self.gid=gid
-    async def callback(self,interaction):
-        conf(self.gid)["log_channel"]=self.values[0].id
-        await interaction.response.send_message("Log channel set to "+self.values[0].mention,ephemeral=True)
-
-class ConfigView(discord.ui.View):
-    def __init__(self,gid):
-        super().__init__(timeout=300); self.gid=gid; self.add_item(LogChannelSelect(gid))
-    @discord.ui.button(label="Disable moderation",style=discord.ButtonStyle.danger,row=1)
-    async def toggle(self,interaction,button):
-        c=conf(self.gid); c["enabled"]=not c["enabled"]
-        button.label="Disable moderation" if c["enabled"] else "Enable moderation"
-        button.style=discord.ButtonStyle.danger if c["enabled"] else discord.ButtonStyle.success
-        await interaction.response.edit_message(embed=config_embed(self.gid),view=self)
-    @discord.ui.button(label="Edit settings",style=discord.ButtonStyle.secondary,row=1)
-    async def edit(self,interaction,button): await interaction.response.send_modal(SettingsModal(self.gid))
-
-@tree.command(name="moderationconfig",description="Configure Timi moderation and security.")
-@app_commands.checks.has_permissions(manage_guild=True)
-async def moderationconfig(interaction):
-    if not interaction.guild: return await interaction.response.send_message("Use this in a server.",ephemeral=True)
-    await interaction.response.send_message(embed=config_embed(interaction.guild.id),view=ConfigView(interaction.guild.id),ephemeral=True)
-
-@tree.command(name="ping",description="Check whether Timi is responding.")
-async def ping(interaction): await interaction.response.send_message("Pong. Timi is online.")
-
-@tree.command(name="about",description="Learn what Timi is.")
-async def about(interaction): await interaction.response.send_message(embed=discord.Embed(title="Timi",description="Discord moderation and security bot.",color=discord.Color.dark_grey()))
-
-@tree.command(name="help",description="Show Timi commands.")
-async def help_cmd(interaction): await interaction.response.send_message("Commands: /ping, /about, /help, /moderationconfig")
 
 class DecisionView(discord.ui.View):
     def __init__(self,uid): super().__init__(timeout=86400); self.uid=uid
@@ -166,8 +104,14 @@ async def on_ready():
     log.info("Connected to Discord as %s (ID %s)",bot.user,bot.user.id if bot.user else "?")
     for g in bot.guilds: await private_channel(g)
     if not synced:
-        try: await tree.sync(); synced=True; log.info("Slash commands synced")
-        except Exception: log.exception("Slash command sync failed")
+        try:
+            # Clear previously registered global slash commands while Timi's system is being redesigned.
+            bot.tree.clear_commands(guild=None)
+            await bot.tree.sync()
+            synced=True
+            log.info("Global slash commands cleared")
+        except Exception:
+            log.exception("Could not clear global slash commands")
 
 @bot.event
 async def on_guild_join(guild): await private_channel(guild)
