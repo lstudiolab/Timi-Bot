@@ -18,6 +18,8 @@ settings = {}
 private_channels = {}
 sent_messages = defaultdict(lambda: defaultdict(lambda: defaultdict(deque)))
 mention_windows = defaultdict(lambda: defaultdict(deque))
+join_events = defaultdict(deque)
+raid_locks = set()
 synced = False
 
 def conf(gid):
@@ -160,6 +162,28 @@ async def on_guild_join(guild): await private_channel(guild)
 @bot.event
 async def on_member_join(member):
     g=member.guild
+    # Eight joins in ten seconds: raise Discord's verification level for one minute.
+    # This is a verification barrier, not a complete server-wide lock.
+    now = time.monotonic()
+    jq = join_events[g.id]
+    jq.append(now)
+    while jq and now - jq[0] > 10:
+        jq.popleft()
+    if len(jq) >= 8 and g.id not in raid_locks:
+        raid_locks.add(g.id)
+        async def temporary_raid_barrier():
+            old_level = g.verification_level
+            try:
+                await g.edit(verification_level=discord.VerificationLevel.high, reason="Timi detected 8 joins within 10 seconds")
+                await report(g, discord.Embed(title="Join raid detected", description="At least 8 members joined within 10 seconds. Verification was raised for 1 minute.", color=discord.Color.red()))
+                await asyncio.sleep(60)
+                await g.edit(verification_level=old_level, reason="Timi join-raid barrier expired")
+            except discord.HTTPException:
+                log.exception("Could not apply join-raid verification barrier")
+            finally:
+                raid_locks.discard(g.id)
+                jq.clear()
+        asyncio.create_task(temporary_raid_barrier())
     if member.bot:
         ch=await private_channel(g)
         if ch:
