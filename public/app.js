@@ -6,6 +6,7 @@
   const code = document.getElementById("code");
   const notice = document.getElementById("notice");
   const intro = document.getElementById("intro");
+  const title = document.getElementById("page-title");
   const button = document.getElementById("submit-button");
   const verifyButton = document.getElementById("verify-button");
   const api = (window.TIMI_API_BASE_URL || "").trim().replace(/\/$/, "");
@@ -26,13 +27,15 @@
     return result;
   }
   if (!/^[a-f0-9]{64}$/i.test(session)) {
-    email.disabled = true; button.disabled = true;
-    show("This link is invalid. Return to Discord and click Verify again.");
+    email.disabled = true;
+    button.disabled = true;
+    show("This link is invalid or expired. Return to Discord and click Verify to create a new link.");
     return;
   }
   if (!api) {
-    email.disabled = true; button.disabled = true;
-    show("The verification service is not configured yet. Contact the server owner.");
+    email.disabled = true;
+    button.disabled = true;
+    show("The website is not connected to Timi yet. The server owner must configure the backend HTTPS URL.");
     return;
   }
   form.addEventListener("submit", async event => {
@@ -51,7 +54,7 @@
     } catch (error) {
       show(error.message || "Could not connect to the verification service.");
       button.disabled = false;
-      button.querySelector(".button-label").textContent = "Send code";
+      button.querySelector(".button-label").textContent = "Continue";
     } finally { button.classList.remove("loading"); }
   });
   codeForm.addEventListener("submit", async event => {
@@ -64,20 +67,26 @@
       const result = await send("/api/verify-code", { session, code: code.value.trim() });
       show(result.message || "Email verified. You can return to Discord.", true);
       codeForm.hidden = true;
-      intro.textContent = "You’re verified.";
-      document.getElementById("page-title").textContent = "You’re all set.";
-      document.querySelector(".security-note").hidden = true;
+      intro.textContent = "Your email is verified and your Discord role has been assigned.";
+      title.textContent = "You’re all set.";
       history.replaceState({}, "", location.pathname);
     } catch (error) {
       show(error.message || "Could not verify that code.");
       verifyButton.disabled = false;
-      verifyButton.querySelector(".button-label").textContent = "Verify and continue";
+      verifyButton.querySelector(".button-label").textContent = "Verify email";
     } finally { verifyButton.classList.remove("loading"); }
   });
   document.getElementById("change-email").addEventListener("click", () => {
-    codeForm.hidden = true; form.hidden = false; email.disabled = false; email.value = ""; code.value = "";
-    notice.hidden = true; intro.textContent = "Enter your email address and we’ll send you a one-time verification code.";
-    button.disabled = false; button.querySelector(".button-label").textContent = "Send code"; email.focus();
+    codeForm.hidden = true;
+    form.hidden = false;
+    email.disabled = false;
+    email.value = "";
+    code.value = "";
+    notice.hidden = true;
+    intro.textContent = "Enter your email to receive a verification code.";
+    button.disabled = false;
+    button.querySelector(".button-label").textContent = "Continue";
+    email.focus();
   });
   code.addEventListener("input", () => { code.value = code.value.replace(/[^0-9]/g, "").slice(0, 6); });
 })();
