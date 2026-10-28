@@ -1,69 +1,83 @@
 (() => {
-  const params = new URLSearchParams(window.location.search);
-  const session = params.get("session") || "";
-  const sessionInput = document.getElementById("session");
+  const session = new URLSearchParams(location.search).get("session") || "";
   const form = document.getElementById("verification-form");
+  const codeForm = document.getElementById("code-form");
   const email = document.getElementById("email");
-  const button = document.getElementById("submit-button");
+  const code = document.getElementById("code");
   const notice = document.getElementById("notice");
-  const label = button.querySelector(".button-label");
-  const defaultLabel = label.textContent;
-
-  // Set TIMI_API_BASE_URL in public/config.js to the public HTTPS tunnel URL for Termux.
-  const configuredApi = (window.TIMI_API_BASE_URL || "").trim().replace(/\/$/, "");
-  const apiBase = configuredApi;
-
-  if (sessionInput) sessionInput.value = session;
-  const showNotice = (message, isError = true) => {
+  const intro = document.getElementById("intro");
+  const button = document.getElementById("submit-button");
+  const verifyButton = document.getElementById("verify-button");
+  const api = (window.TIMI_API_BASE_URL || "").trim().replace(/\/$/, "");
+  const show = (message, success = false) => {
     notice.textContent = message;
     notice.hidden = false;
-    notice.classList.toggle("error", isError);
-    notice.classList.toggle("success", !isError);
+    notice.classList.toggle("error", !success);
+    notice.classList.toggle("success", success);
   };
-
+  async function send(path, data) {
+    const response = await fetch(api + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify(data)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) throw new Error(result.message || "Request failed.");
+    return result;
+  }
   if (!/^[a-f0-9]{64}$/i.test(session)) {
-    email.disabled = true;
-    button.disabled = true;
-    showNotice("This verification link is invalid. Return to Discord and click Verify to create a new link.");
+    email.disabled = true; button.disabled = true;
+    show("This link is invalid. Return to Discord and click Verify again.");
     return;
   }
-
-  form.addEventListener("submit", async (event) => {
+  if (!api) {
+    email.disabled = true; button.disabled = true;
+    show("The verification service is not configured yet. Contact the server owner.");
+    return;
+  }
+  form.addEventListener("submit", async event => {
     event.preventDefault();
-    if (!email.checkValidity()) {
-      email.reportValidity();
-      return;
-    }
-    if (!apiBase) {
-      showNotice("The verification API has not been configured. Contact the server owner.");
-      return;
-    }
+    if (!email.checkValidity()) { email.reportValidity(); return; }
     button.disabled = true;
+    button.querySelector(".button-label").textContent = "Sending code…";
     button.classList.add("loading");
-    label.textContent = "Sending code…";
     try {
-      const response = await fetch(`${apiBase}/api/request-code`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({ session, email: email.value.trim() })
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result.ok) throw new Error(result.message || "The code could not be sent. Try again later.");
-      showNotice(result.message || "Check your email, then return to Discord and use /verifycode.", false);
-      form.reset();
-      sessionInput.value = session;
-      email.disabled = true;
-      label.textContent = "Code requested";
+      const result = await send("/api/request-code", { session, email: email.value.trim() });
+      form.hidden = true;
+      codeForm.hidden = false;
+      intro.textContent = "Enter the six-digit code sent to your email.";
+      show(result.message || "Check your inbox for the code.", true);
+      code.focus();
     } catch (error) {
-      showNotice(error.message || "Could not connect to the verification service. Check your connection and try again.");
+      show(error.message || "Could not connect to the verification service.");
       button.disabled = false;
-      label.textContent = defaultLabel;
-    } finally {
-      button.classList.remove("loading");
-    }
+      button.querySelector(".button-label").textContent = "Send code";
+    } finally { button.classList.remove("loading"); }
   });
-
-  email.addEventListener("input", () => {
-    if (!notice.hidden) notice.hidden = true;
+  codeForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!code.checkValidity()) { code.reportValidity(); return; }
+    verifyButton.disabled = true;
+    verifyButton.classList.add("loading");
+    verifyButton.querySelector(".button-label").textContent = "Verifying…";
+    try {
+      const result = await send("/api/verify-code", { session, code: code.value.trim() });
+      show(result.message || "Email verified. You can return to Discord.", true);
+      codeForm.hidden = true;
+      intro.textContent = "You’re verified.";
+      document.getElementById("page-title").textContent = "You’re all set.";
+      document.querySelector(".security-note").hidden = true;
+      history.replaceState({}, "", location.pathname);
+    } catch (error) {
+      show(error.message || "Could not verify that code.");
+      verifyButton.disabled = false;
+      verifyButton.querySelector(".button-label").textContent = "Verify and continue";
+    } finally { verifyButton.classList.remove("loading"); }
   });
+  document.getElementById("change-email").addEventListener("click", () => {
+    codeForm.hidden = true; form.hidden = false; email.disabled = false; email.value = ""; code.value = "";
+    notice.hidden = true; intro.textContent = "Enter your email address and we’ll send you a one-time verification code.";
+    button.disabled = false; button.querySelector(".button-label").textContent = "Send code"; email.focus();
+  });
+  code.addEventListener("input", () => { code.value = code.value.replace(/[^0-9]/g, "").slice(0, 6); });
 })();
