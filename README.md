@@ -34,7 +34,7 @@ Run `/setup` with the Manage Server permission. Timi creates `#timi-logs` and `#
 
 ## Moderation panel
 
-Run `/moderation-panel` in a server. You need the **Manage Server** permission.
+Run `/moderationconfig` in a server. You need the **Manage Server** permission.
 
 The panel contains the controls shown in the reference:
 
@@ -48,7 +48,7 @@ Settings are saved per server in `data/moderation-settings.json` on the machine 
 
 ## Anti-spam enforcement
 
-The moderation module now checks rapid message bursts, repeated or near-identical text, excessive mentions, and rapid link posting. Detection state is tracked per server and member in memory. When a trigger is detected, Timi attempts to delete recent spam messages and applies the configured timeout, kick, or ban when it has the required Discord permissions. If a sanction cannot be applied, it logs the failure to the console. Configure a log channel to receive moderation action reports.
+The moderation module checks rapid message bursts per channel and member, repeated or near-identical text, excessive mentions, and rapid link posting. Detection state is kept in bounded in-memory queues. Settings are cached in memory, so message processing does not synchronously read the JSON settings file for each message. When a trigger is detected, Timi attempts to delete recent spam messages and applies the configured timeout, kick, or ban when it has the required Discord permissions. If a sanction cannot be applied, it logs the failure to the console. Configure a log channel to receive moderation action reports.
 
 Moderators with Manage Messages or Administrator are exempt. Timi itself is ignored, but other bot accounts are evaluated too. The detector is heuristic: test it in a private server first, because thresholds can produce false positives. Runtime detection history resets when Timi restarts; server settings remain stored in `data/moderation-settings.json` on the host.
 
@@ -57,3 +57,12 @@ Moderators with Manage Messages or Administrator are exempt. Timi itself is igno
 - Never commit or share `.env`.
 - Keep the real bot token private.
 - If a token is exposed, reset it in the Discord Developer Portal.
+
+
+## Runtime efficiency
+
+- Moderation settings are loaded from disk once and written only when a setting changes.
+- Message handling exits early for DMs, bots, moderators, and disabled moderation before normalizing content.
+- Message/fingerprint/link queues are pruned from their heads and bounded to prevent unbounded per-user state.
+- Anti-spam state is keyed by server, channel, and user so activity in separate channels does not count toward the same message burst.
+- The private `#timi` channel is shared by bot approval requests and owner-facing moderation alerts.
