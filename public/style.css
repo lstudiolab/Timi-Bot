@@ -305,3 +305,18 @@ button.loading .spinner { display: block; }
     scroll-behavior: auto !important;
   }
 }
+
+
+#code-form[hidden], #verification-form[hidden] { display: none; }
+
+button.secondary-button {
+  margin-top: 8px;
+  min-height: 42px;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 14px;
+}
+button.secondary-button:hover:not(:disabled) {
+  background: rgba(0, 113, 227, .07);
+}
