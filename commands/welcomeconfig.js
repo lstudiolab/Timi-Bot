@@ -30,6 +30,10 @@ function saveSettings(guildId, settings) {
 }
 
 module.exports = {
+  resetSettings(guildId) {
+    saveSettings(guildId, DEFAULTS);
+    return getSettings(guildId);
+  },
   data: new SlashCommandBuilder()
     .setName("welcomeconfig")
     .setDescription("Configure join welcome messages for this server.")
