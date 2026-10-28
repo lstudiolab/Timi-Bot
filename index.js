@@ -420,7 +420,6 @@ client.on("channelDelete", channel => {
 const spamState = new Map();
 const SPAM_WINDOW_MS = 8_000;
 const DUPLICATE_WINDOW_MS = 20_000;
-const MAX_MENTIONS_PER_MESSAGE = 5;
 const MAX_TRACKED_MESSAGES = 100;
 const CLEANUP_EVERY_MESSAGES = 2_000;
 let processedMessages = 0;
@@ -467,7 +466,7 @@ async function sendModerationLog(guild, settings, content) {
   if (!settings.logChannelId) return;
   const channel = guild.channels.cache.get(settings.logChannelId);
   if (!channel?.isTextBased() || !channel.isSendable()) return;
-  await channel.send({ content }).catch(error => {
+  await channel.send({ content, allowedMentions: { parse: [] } }).catch(error => {
     console.error("Could not send moderation log:", error.message);
   });
 }
@@ -539,6 +538,8 @@ client.on("messageCreate", async message => {
     // getSettings is memory-cached; it does not synchronously read JSON for each message.
     const settings = moderation.getSettings(message.guild);
     if (!settings.enabled) return;
+    if ((settings.exemptChannelIds || []).includes(message.channelId)) return;
+    if ((settings.exemptRoleIds || []).some(roleId => member.roles.cache.has(roleId))) return;
 
     const now = Date.now();
     const actionWindowMs = Math.max(1, Math.min(60, Number(settings.actionDurationSeconds || 3))) * 1000;
@@ -550,7 +551,7 @@ client.on("messageCreate", async message => {
     }
 
     pruneQueue(state.recent, now - actionWindowMs);
-    pruneQueue(state.fingerprints, now - DUPLICATE_WINDOW_MS);
+    pruneQueue(state.fingerprints, now - Math.max(5, Math.min(120, Number(settings.duplicateWindowSeconds || 20))) * 1000);
     pruneQueue(state.links, now - actionWindowMs);
 
     state.recent.push({ id: message.id, time: now });
@@ -569,18 +570,18 @@ client.on("messageCreate", async message => {
 
     if (!reason && content.length >= 4) {
       for (const item of state.fingerprints) {
-        if (similarity(content, item.content) >= 0.88) {
+        if (similarity(content, item.content) >= Number(settings.similarityThreshold || 0.88)) {
           reason = "repeated or near-identical message";
           break;
         }
       }
     }
 
-    if (!reason && mentionCount >= MAX_MENTIONS_PER_MESSAGE) {
+    if (!reason && mentionCount >= Math.max(1, Number(settings.maxMentionsPerMessage || 5))) {
       reason = `mention spam (${mentionCount} mentions in one message)`;
     }
 
-    if (!reason && linkCount >= 4) {
+    if (!reason && linkCount >= Math.max(1, Number(settings.maxLinksPerMessage || 4))) {
       reason = `link spam (${linkCount} links in one message)`;
     }
 
@@ -588,7 +589,7 @@ client.on("messageCreate", async message => {
       state.links.push({ time: now, count: linkCount });
       let totalLinks = 0;
       for (const item of state.links) totalLinks += item.count;
-      if (totalLinks >= 5) reason = `rapid link posting (${totalLinks} links)`;
+      if (totalLinks >= Math.max(2, Number(settings.maxLinksPerWindow || 5))) reason = `rapid link posting (${totalLinks} links)`;
     }
 
     if (reason) {
@@ -615,7 +616,7 @@ client.on("messageCreate", async message => {
     if (processedMessages >= CLEANUP_EVERY_MESSAGES) {
       processedMessages = 0;
       const recentCutoff = now - 60_000;
-      const duplicateCutoff = now - DUPLICATE_WINDOW_MS;
+      const duplicateCutoff = now - 120_000;
       for (const [stateId, entry] of spamState) {
         pruneQueue(entry.recent, recentCutoff);
         pruneQueue(entry.fingerprints, duplicateCutoff);
