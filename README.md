@@ -30,7 +30,7 @@ Timi registers slash commands when it starts. When `GUILD_ID` is set, commands a
 
 ## Server setup
 
-Run `/setup` with the Manage Server permission. Timi creates `#timi-logs` and `#timi-confirmations`, both private to the server owner, the user who ran `/setup`, and Timi. The log channel is saved as the server's moderation log destination. Timi needs Manage Channels permission. If either channel name already exists, setup stops rather than changing existing channel permissions.
+Run `/setup` with the Manage Server permission. Timi creates the `ticket` category if it does not exist, along with `#timi-logs` and `#timi-confirmations`. The log channel is saved as the server's moderation log destination. Timi needs Manage Channels permission. If either private channel name already exists, setup stops rather than changing existing channel permissions.
 
 ## Moderation panel
 
@@ -66,3 +66,12 @@ Moderators with Manage Messages or Administrator are exempt. Timi itself is igno
 - Message/fingerprint/link queues are pruned from their heads and bounded to prevent unbounded per-user state.
 - Anti-spam state is keyed by server, channel, and user so activity in separate channels does not count toward the same message burst.
 - The private `#timi` channel is shared by bot approval requests and owner-facing moderation alerts.
+
+
+## Ticket system
+
+Run `/ticketpanel` with Manage Server permission to open the private ticket-panel configurator. Customize the public panel title, description, Open Ticket button label, the message shown inside each ticket, the Close Ticket button label, and the ticket category name. Select **Publish Panel** to post the configured panel in the current channel.
+
+When a member opens a ticket, Timi creates a private text channel under the configured category. The channel name uses the `ticket-username` format (Discord channel names use hyphens rather than spaces). The ticket is visible to its owner and Timi; server managers can manage tickets. The Close Ticket button asks for confirmation in an ephemeral message. Confirming displays `Closing this ticket in 5 seconds…`, then deletes the ticket channel.
+
+Timi needs Manage Channels permission to create and delete ticket channels. Ticket settings are stored per server in `data/ticket-settings.json` on the machine running Timi. Existing open tickets are identified by their channel topic to prevent a member opening duplicate tickets.
