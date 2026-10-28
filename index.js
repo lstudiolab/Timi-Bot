@@ -12,6 +12,7 @@ const {
 } = require("discord.js");
 
 const botProtection = require("./bot-protection");
+const ticketPanel = require("./commands/ticketpanel");
 
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.CLIENT_ID;
@@ -148,6 +149,11 @@ client.on("interactionCreate", async interaction => {
   try {
     if (interaction.customId?.startsWith("botguard:")) {
       await botProtection.handleInteraction(interaction, client);
+      return;
+    }
+
+    if (interaction.customId?.startsWith("ticket:")) {
+      await ticketPanel.handleInteraction(interaction, client);
       return;
     }
 
