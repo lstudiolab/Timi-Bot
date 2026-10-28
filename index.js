@@ -520,6 +520,7 @@ client.on("messageCreate", async message => {
     if (!settings.enabled) return;
 
     const now = Date.now();
+    const actionWindowMs = Math.max(1, Math.min(60, Number(settings.actionDurationSeconds || 3))) * 1000;
     const key = stateKey(message.guild.id, message.channelId, message.author.id);
     let state = spamState.get(key);
     if (!state) {
@@ -527,9 +528,9 @@ client.on("messageCreate", async message => {
       spamState.set(key, state);
     }
 
-    pruneQueue(state.recent, now - SPAM_WINDOW_MS);
+    pruneQueue(state.recent, now - actionWindowMs);
     pruneQueue(state.fingerprints, now - DUPLICATE_WINDOW_MS);
-    pruneQueue(state.links, now - SPAM_WINDOW_MS);
+    pruneQueue(state.links, now - actionWindowMs);
 
     state.recent.push({ id: message.id, time: now });
     if (state.recent.length > MAX_TRACKED_MESSAGES) {
@@ -542,7 +543,7 @@ client.on("messageCreate", async message => {
     let reason = null;
 
     if (state.recent.length >= Math.max(2, settings.maxMessageCount)) {
-      reason = `message burst (${state.recent.length} messages in ${SPAM_WINDOW_MS / 1000} seconds in one channel)`;
+      reason = `message burst (${state.recent.length} messages in ${actionWindowMs / 1000} seconds in one channel)`;
     }
 
     if (!reason && content.length >= 4) {
@@ -590,7 +591,7 @@ client.on("messageCreate", async message => {
     processedMessages++;
     if (processedMessages >= CLEANUP_EVERY_MESSAGES) {
       processedMessages = 0;
-      const recentCutoff = now - SPAM_WINDOW_MS;
+      const recentCutoff = now - 60_000;
       const duplicateCutoff = now - DUPLICATE_WINDOW_MS;
       for (const [stateId, entry] of spamState) {
         pruneQueue(entry.recent, recentCutoff);
