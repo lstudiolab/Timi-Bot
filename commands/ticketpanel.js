@@ -545,10 +545,16 @@ async function handleInteraction(interaction, client) {
       return true;
     }
     saveSettings(interaction.guildId, settings);
-    await interaction.reply({ content: "Ticket settings saved.", ephemeral: true });
+    await interaction.update({
+      ...buildConfigPanel(settings),
+      content: "Ticket settings saved. Updating published panels..."
+    });
     await refreshConfigPanel(interaction.guild, settings);
     await refreshPublishedPanels(interaction.guild, settings);
-    await interaction.editReply({ content: "Ticket settings saved. Published panels have been updated." });
+    await interaction.editReply({
+      ...buildConfigPanel(settings),
+      content: "Ticket settings saved. Published panels have been updated."
+    });
     return true;
   }
 
