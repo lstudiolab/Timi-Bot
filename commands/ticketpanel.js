@@ -320,7 +320,7 @@ async function openTicket(interaction, client) {
     });
 
     const embed = new EmbedBuilder()
-      .setColor(0x808080)
+      .setColor(parseInt(settings.panelColor || "808080", 16))
       .setTitle(settings.panelTitle)
       .setDescription(settings.ticketMessage)
       .setFooter({ text: `Ticket owner: ${interaction.user.tag}` });
