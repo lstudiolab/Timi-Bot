@@ -101,8 +101,8 @@ const MAX_MENTIONS_PER_MESSAGE = 5;
 function normalizeContent(content) {
   return content
     .toLowerCase()
-    .replace(/https?:\\/\\/\\S+/g, "<url>")
-    .replace(/<@!?\\d+>|<@&\\d+>|<#\\d+>/g, "<mention>")
+    .replace(/https?:\/\/\S+/g, "<url>")
+    .replace(/<@!?\d+>|<@&\d+>|<#\d+>/g, "<mention>")
     .replace(/\\s+/g, " ")
     .replace(/[\\p{P}\\p{S}]/gu, "")
     .trim();
@@ -205,7 +205,7 @@ client.on("messageCreate", async message => {
     const recentIds = state.recent.map(item => item.id);
 
     const mentionCount = message.mentions.users.size + message.mentions.roles.size;
-    const linkCount = (message.content.match(/https?:\\/\\//gi) || []).length;
+    const linkCount = (message.content.match(/https?:\/\//gi) || []).length;
     let reason = null;
 
     if (state.recent.length >= Math.max(2, settings.maxMessageCount)) {
