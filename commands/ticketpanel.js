@@ -115,6 +115,12 @@ function isManager(interaction) {
     interaction.user.id === interaction.guild?.ownerId;
 }
 
+function isTicketStaff(interaction, settings) {
+  if (isManager(interaction)) return true;
+  const roleIds = settings.supportRoleIds || [];
+  return Boolean(interaction.member?.roles?.cache && roleIds.some(roleId => interaction.member.roles.cache.has(roleId)));
+}
+
 function makeInput(id, label, value, style = TextInputStyle.Short, maxLength = 100) {
   const input = new TextInputBuilder()
     .setCustomId(id)
@@ -163,7 +169,7 @@ function buildConfigPanel(settings) {
     .setColor(0x808080)
     .setTitle("Ticket Panel Configuration")
     .setDescription(
-      `**Panel title:** ${settings.panelTitle}\n**Panel description:** ${settings.panelDescription}\n**Open button:** ${settings.openButtonLabel}\n**Ticket message:** ${settings.ticketMessage}\n**Close button:** ${settings.closeButtonLabel}\n**Category:** ${settings.categoryName}\n\nEdit each part, then use Publish Panel to post the public ticket panel in this channel.`
+      `**Panel title:** ${settings.panelTitle}\n**Panel description:** ${settings.panelDescription}\n**Open button:** ${settings.openButtonLabel}\n**Ticket message:** ${settings.ticketMessage}\n**Close button:** ${settings.closeButtonLabel}\n**Category:** ${settings.categoryName}\n**Support roles:** ${(settings.supportRoleIds || []).map(roleId => `<@&${roleId}>`).join(", ") || "Server managers only"}\n**Transcript channel:** ${settings.transcriptChannelId ? `<#${settings.transcriptChannelId}>` : "Not configured"}\n**Close delay:** ${settings.closeDelaySeconds ?? 5} seconds\n\nEdit each part, then use Publish Panel to post the public ticket panel in this channel.`
     );
 
   const row1 = new ActionRowBuilder().addComponents(
@@ -386,7 +392,8 @@ async function handleInteraction(interaction, client) {
       return true;
     }
     const ownerId = channel.topic.slice("timi-ticket-owner:".length);
-    if (interaction.user.id !== ownerId && !isManager(interaction)) {
+    const ticketSettings = getSettings(interaction.guildId);
+    if (interaction.user.id !== ownerId && !isTicketStaff(interaction, ticketSettings)) {
       await interaction.reply({ content: "Only the ticket owner or a server manager can close this ticket.", ephemeral: true });
       return true;
     }
@@ -412,7 +419,8 @@ async function handleInteraction(interaction, client) {
       return true;
     }
     const ownerId = channel.topic.slice("timi-ticket-owner:".length);
-    if (interaction.user.id !== ownerId && !isManager(interaction)) {
+    const ticketSettings = getSettings(interaction.guildId);
+    if (interaction.user.id !== ownerId && !isTicketStaff(interaction, ticketSettings)) {
       await interaction.reply({ content: "Only the ticket owner or a server manager can close this ticket.", ephemeral: true });
       return true;
     }
