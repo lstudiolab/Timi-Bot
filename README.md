@@ -37,7 +37,8 @@ The bot needs Manage Channels to create and delete tickets. Transcript delivery 
 
 ## Moderation
 
-- `/moderationconfig` configures anti-spam module status, the sanction, timeout duration, the log channel, the action/detection window, and the message-count threshold.
+- `/moderationconfig` configures anti-spam module status, the sanction, timeout duration, the log channel, the action/detection window, message-count threshold, mention/link limits, duplicate window, and similarity threshold.
+- `/moderationexempt` adds, removes, or clears role/channel exemptions from anti-spam checks.
 - Available anti-spam sanctions: timeout, kick, ban, or delete messages only.
 - Moderation actions are logged to the selected log channel when configured.
 - `/warn` records a member warning, `/warnings` views recent warning history, and `/clearwarnings` clears a member's warnings.
