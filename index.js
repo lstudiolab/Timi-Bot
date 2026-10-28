@@ -291,6 +291,21 @@ client.on("guildMemberAdd", member => {
   monitorNewAccount(member).catch(error => {
     console.error("New-account monitoring failed:", error.message);
   });
+  commands.get("welcomeconfig")?.onMemberJoin?.(member).catch(error => {
+    console.error("Welcome message failed:", error.message);
+  });
+  const moderation = commands.get("moderationconfig");
+  if (moderation?.getSettings) {
+    sendModerationLog(member.guild, moderation.getSettings(member.guild),
+      "Member joined: <@" + member.id + "> (" + member.user.tag + ").");
+  }
+});
+client.on("guildMemberRemove", member => {
+  const moderation = commands.get("moderationconfig");
+  if (moderation?.getSettings) {
+    sendModerationLog(member.guild, moderation.getSettings(member.guild),
+      "Member left: " + member.user.tag + " (" + member.id + ").");
+  }
 });
 
 const channelDeletionHistory = new Map();
