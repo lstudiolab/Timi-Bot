@@ -152,7 +152,10 @@ function buildConfigPanel(settings) {
     new ButtonBuilder().setCustomId("ticket:edit-category").setLabel("Edit Category").setStyle(ButtonStyle.Secondary)
   );
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("ticket:publish").setLabel("Publish Panel").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId("ticket:publish")
+      .setLabel(Array.isArray(settings.publishedPanels) && settings.publishedPanels.length ? "Update Published Panel" : "Publish Panel")
+      .setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId("ticket:edit-delay").setLabel("Close Delay").setStyle(ButtonStyle.Secondary)
   );
   const row3 = new ActionRowBuilder().addComponents(
@@ -471,7 +474,7 @@ async function handleInteraction(interaction, client) {
       return true;
     }
     const settings = getSettings(interaction.guildId);
-    settings.supportRoleIds = interaction.values.slice(0, 10);
+    settings.supportRoleIds = interaction.values.filter(roleId => roleId !== interaction.guild.roles.everyone.id && interaction.guild.roles.cache.has(roleId) && !interaction.guild.roles.cache.get(roleId).managed).slice(0, 10);
     saveSettings(interaction.guildId, settings);
     await interaction.update({ ...buildConfigPanel(settings), content: "Support roles saved." });
     return true;
@@ -542,11 +545,21 @@ async function handleInteraction(interaction, client) {
       await interaction.reply({ content: "You need Manage Server permission to publish a ticket panel.", ephemeral: true });
       return true;
     }
-    const message = await interaction.channel.send(buildPublicPanel(getSettings(interaction.guildId)));
+    const settings = getSettings(interaction.guildId);
+    const published = Array.isArray(settings.publishedPanels) ? settings.publishedPanels : [];
+    if (published.length) {
+      await refreshPublishedPanels(interaction.guild, settings);
+      await interaction.update({
+        ...buildConfigPanel(getSettings(interaction.guildId)),
+        content: "Existing published ticket panels have been updated."
+      });
+      return true;
+    }
+    const message = await interaction.channel.send(buildPublicPanel(settings));
     rememberPublishedPanel(interaction.guildId, interaction.channelId, message.id);
     await interaction.update({
       ...buildConfigPanel(getSettings(interaction.guildId)),
-      content: "Ticket panel published. This setup message has been updated; use it to continue configuring tickets."
+      content: "Ticket panel published. Use /panelconfig to change its settings."
     });
     return true;
   }
