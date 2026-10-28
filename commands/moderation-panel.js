@@ -378,5 +378,6 @@ module.exports = {
     saveSettings(interaction.guildId, settings);
   },
   handleInteraction,
-  getSettings
+  getSettings,
+  saveSettings
 };
