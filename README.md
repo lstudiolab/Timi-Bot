@@ -77,35 +77,59 @@ When a member opens a ticket, Timi creates a private text channel under the conf
 Timi needs Manage Channels permission to create and delete ticket channels. Ticket settings are stored per server in `data/ticket-settings.json` on the machine running Timi. Existing open tickets are identified by their channel topic to prevent a member opening duplicate tickets.
 
 
-## Email verification website
+## Email verification website (Render frontend + Termux backend)
 
-Timi now includes a small HTTPS-hosted verification site and Discord verification flow in the same repository.
+The verification website can be split across two hosts so the Discord bot and its active verification sessions stay in one process on your Android phone.
 
-### Configure hosting and email
+### Architecture
 
-- Deploy this repository as a Render **Web Service**, not a worker, so it can receive web requests. The bot and website run in the same Node process.
-- Add the environment variables from `.env.example` to Render. Set `BASE_URL` to the public HTTPS URL assigned to this service.
-- Configure SMTP credentials for a real email provider. `VERIFICATION_FROM` must be an address authorized by that provider. Do not commit secrets.
-- Use a persistent disk mounted at the repository's `data` directory if you need the JSON settings and seven-day IP blocks to survive service restarts. A database is preferable for multiple instances; this implementation is intended for one running instance.
-- The website starts when Timi becomes ready. `GET /health` is available for a service health check.
+- **Render Static Site:** publishes the `public/` directory only. It serves the HTML, CSS, and browser JavaScript over HTTPS; it does not run the Discord bot.
+- **Termux on Android:** runs `node index.js`, the Discord bot, active verification sessions, rate-limit state, and SMTP email delivery.
+- **HTTPS tunnel:** exposes the local Termux HTTP server on port `3000) through a public HTTPS URL. A phone on a mobile carrier network generally cannot accept direct inbound connections, so use a tunnel.
+- **Session continuity:** do not run a second bot copy on Render. Sessions are in memory and must be created and consumed by the same running Termux process.
 
-### Discord setup
+### Configure Render Static Site
 
-1. Start Timi after setting the environment variables.
-2. As the server owner, run `/verificationconfig role:@Verified channel:#verification`. You can also customize the panel title and description. Timi needs **Manage Roles**, and its highest role must be above the role it grants.
-3. Run `/verifypanel` in the channel where the public panel should appear.
-4. Members click **Verify**, open the private website link, and request a code by email.
-5. In the configured verification channel, members run `/verifycode`, click **Enter verification code**, and submit the six-digit code in Discord.
-6. Timi checks the code, expiration, single-use state and attempt limit, grants the configured role, and offers a private **Claim username** button. The member must type the generated username exactly in the modal.
+1. In Render, create a **Static Site** from `lstudiolab/Timi-Bot`, branch `main`.
+2. Set the **Publish Directory** to `public`. No build command is needed.
+3. After creation, copy its exact HTTPS origin, such as `https://your-timi-frontend.onrender.com`.
+4. Edit `public/config.js` in GitHub and set `window.TIMI_API_BASE_URL` to the public HTTPS tunnel URL for the Termux server. Do not include a trailing slash. This file contains no secrets.
+5. Set the Termux environment variables `BASE_URL` and `FRONTEND_ORIGIN) to that exact Render Static Site origin.
 
-### Abuse controls
+### Configure Termux backend
 
-- Email codes expire after 10 minutes and are stored as hashes rather than plaintext.
-- A code can be accepted once. Verification sessions expire after 30 minutes; five incorrect attempts are allowed before the session is invalidated.
-- A hashed network identifier is used for request-rate tracking. At 20 requests in a rolling 24-hour period, that network hash is blocked for seven days. The raw IP is not written to the JSON store.
-- A ten-slot heuristic organizer (nine signals plus an aggregate-risk slot) flags unusual request volume, repeated email requests, failed codes, missing browser identification, rapid requests, session reuse, and network changes. Alerts are sent to the private `#timi` channel when available. Signals are heuristic and can produce false positives.
-- Do not expose the service directly without HTTPS. Set `TRUST_PROXY=true` only when the app is behind a trusted reverse proxy such as Render's that appends the real client address to `X-Forwarded-For`; otherwise leave it false. The app uses the rightmost forwarded address when this flag is enabled. Verify the hosting provider's proxy behavior before relying on IP-based rate limits.
+Set these values in the existing `.env` on the phone:
 
-### Important deployment note
+- `BASE_URL`: Render Static Site origin. Timi uses it to generate member-facing links such as `/verify?session=...`.
+- `FRONTEND_ORIGIN`: same exact origin, with no path or trailing slash. The API uses this strict allowlist for CORS.
+- `PORT=3000`
+- `TRUST_PROXY=false` initially. Only enable it after confirming your chosen tunnel's forwarded-IP behavior; incorrect proxy trust can weaken rate limiting.
+- SMTP settings: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `VERIFICATION_FROM`.
+- `IP_HASH_SECRET`: a long random secret. Keep it stable between restarts.
 
-This first implementation keeps active verification sessions in process memory. Restarting or redeploying the service invalidates in-progress verification links and codes, while saved guild settings and IP blocks are in `data/verification.json`. Use a persistent disk and a single instance for this version.
+Then pull the latest repository changes and install dependencies if needed:
+
+```bash
+git pull
+npm install
+npm start
+```
+
+Keep the bot running in Termux. Start the HTTPS tunnel in a second Termux session and forward its public URL to `http://127.0.0.1:3000`. Set the resulting public HTTPS URL in `public/config.js`, commit/push that change, and wait for Render to redeploy the static site.
+
+### Verify the deployment
+
+1. Open `https://YOUR-TERMUX-TUNNEL/health`. It should return JSON containing `"ok":true`.
+2. Confirm the Render Static Site loads `/`, `/style.css`, `/app.js`, and `/config.js).
+3. In Discord, run `/verificationconfig` and configure the role/channel, then run `/verifypanel`.
+4. Click **Verify**. The link must use the Render Static Site origin and contain a 64-character session token.
+5. Submit an email address. The page should show a generic success message, and the one-time code should arrive by email. Then complete `/verifycode) in Discord.
+
+### Security and operational limits
+
+- The API accepts cross-origin requests only from the exact `FRONTEND_ORIGIN` configured on the Termux backend and supports CORS preflight for JSON requests.
+- Email codes expire after 10 minutes, are stored as hashes, and are limited to five incorrect attempts. Verification sessions expire after 30 minutes and are stored in process memory.
+- The network request limit is 20 requests in a rolling 24-hour period before a hashed network identifier is blocked for seven days. Raw IP addresses are not stored in the JSON file.
+- A bot or backend restart invalidates active sessions and codes. Keep one bot process running.
+- The tunnel URL must remain the same while the frontend is configured to use it. Temporary tunnel URLs change when restarted, requiring an update to `public/config.js`.
+- Never put Discord tokens, SMTP passwords, or other secrets in the `public/` directory or commit them to GitHub.
