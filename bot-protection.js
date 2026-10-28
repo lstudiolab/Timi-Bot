@@ -1,3 +1,5 @@
+const fs = require("node:fs");
+const path = require("node:path");
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -9,6 +11,47 @@ const {
 
 const pending = new Map();
 const CONFIRMATION_CHANNEL = "timi";
+const STATE_PATH = path.join(__dirname, "data", "bot-protection-state.json");
+
+function savePending() {
+  fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
+  const temp = STATE_PATH + ".tmp";
+  fs.writeFileSync(temp, JSON.stringify({ pending: Object.fromEntries(pending) }, null, 2) + "\\n", "utf8");
+  fs.renameSync(temp, STATE_PATH);
+}
+
+try {
+  const saved = JSON.parse(fs.readFileSync(STATE_PATH, "utf8"));
+  for (const [key, record] of Object.entries(saved.pending || {})) pending.set(key, record);
+} catch (error) {
+  if (error.code !== "ENOENT") console.error("Could not load bot approval state:", error.message);
+}
+
+function snapshotOverwrite(channel, botId) {
+  const overwrite = channel.permissionOverwrites?.cache?.get(botId);
+  return overwrite
+    ? { channelId: channel.id, exists: true, allow: overwrite.allow.bitfield.toString(), deny: overwrite.deny.bitfield.toString() }
+    : { channelId: channel.id, exists: false };
+}
+
+async function restorePermissions(guild, botId, record) {
+  const failures = [];
+  for (const saved of (record.overwrites || [])) {
+    try {
+      const channel = guild.channels.cache.get(saved.channelId) || await guild.channels.fetch(saved.channelId).catch(() => null);
+      if (!channel?.permissionOverwrites) continue;
+      const current = channel.permissionOverwrites.cache.get(botId);
+      if (current) await current.delete("Restore pre-approval bot permissions");
+      if (saved.exists) {
+        await channel.permissionOverwrites.create(botId, { allow: BigInt(saved.allow), deny: BigInt(saved.deny) }, { reason: "Restore pre-approval bot permissions" });
+      }
+    } catch (error) {
+      failures.push(saved.channelId);
+      console.error("Could not restore prior bot permissions:", error.message);
+    }
+  }
+  return failures;
+}
 
 async function getConfirmationChannel(guild, client) {
   let channel = guild.channels.cache.find(
