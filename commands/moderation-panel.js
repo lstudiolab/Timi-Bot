@@ -38,15 +38,27 @@ const SANCTION_LABELS = {
   delete: "Delete messages only"
 };
 
+let settingsCache;
+
 function readStore() {
+  if (settingsCache) return settingsCache;
+
   try {
-    if (!fs.existsSync(SETTINGS_FILE)) return {};
+    if (!fs.existsSync(SETTINGS_FILE)) {
+      settingsCache = {};
+      return settingsCache;
+    }
+
     const parsed = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
-    return parsed && typeof parsed === "object" ? parsed : {};
+    settingsCache = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : {};
   } catch (error) {
     console.error("Could not read moderation settings:", error.message);
-    return {};
+    settingsCache = {};
   }
+
+  return settingsCache;
 }
 
 function writeStore(store) {
@@ -54,15 +66,18 @@ function writeStore(store) {
   const temporaryFile = `${SETTINGS_FILE}.tmp`;
   fs.writeFileSync(temporaryFile, JSON.stringify(store, null, 2) + "\n", "utf8");
   fs.renameSync(temporaryFile, SETTINGS_FILE);
+  settingsCache = store;
 }
 
 function getSettings(guild) {
   const store = readStore();
+
   if (!store[guild.id]) {
     const announcements = guild.channels.cache.find(
       channel => channel.type === ChannelType.GuildText &&
         channel.name.toLowerCase() === "announcements"
     );
+
     store[guild.id] = {
       ...DEFAULT_SETTINGS,
       logChannelId: announcements ? announcements.id : null
