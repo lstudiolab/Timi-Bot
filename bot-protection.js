@@ -189,7 +189,6 @@ async function handleInteraction(interaction, client) {
   const member = await guild.members.fetch(botId).catch(() => null);
 
   if (decision === "no") {
-    await restorePermissions(guild, botId, record);
     if (member) {
       const botMember = guild.members.me || await guild.members.fetch(client.user.id);
       if (!botMember.permissions.has(PermissionFlagsBits.KickMembers)) {
@@ -199,6 +198,7 @@ async function handleInteraction(interaction, client) {
         });
         return true;
       }
+      await restorePermissions(guild, botId, record);
       await member.kick(`Bot rejected by ${interaction.user.tag} through Timi bot protection.`);
     }
     pending.delete(key);
@@ -213,8 +213,8 @@ async function handleInteraction(interaction, client) {
   if (decision === "yes") {
     if (!member) {
       await restorePermissions(guild, botId, record);
+      await restorePermissions(guild, botId, record);
       pending.delete(key);
-    savePending();
       savePending();
       await interaction.update({
         embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setTitle("Bot no longer in server").setDescription("The bot left before approval was completed.")],
@@ -234,7 +234,7 @@ async function handleInteraction(interaction, client) {
     pending.delete(key);
     savePending();
     await interaction.update({
-      embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x808080).setTitle("Bot approved").setDescription("The bot was approved. Its prior channel permissions were restored${restoreFailures.length ? " with restoration errors; check the console" : ""}.")],
+      embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x808080).setTitle("Bot approved").setDescription("The bot was approved. Its prior channel permissions were restored" + (restoreFailures.length ? " with restoration errors; check the console" : "") + ".")],
       components: []
     });
     return true;
