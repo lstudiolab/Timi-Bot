@@ -186,6 +186,53 @@ const RAID_JOIN_THRESHOLD = 6;
 const RAID_ALERT_COOLDOWN_MS = 60_000;
 const raidAlertTimes = new Map();
 
+const NEW_ACCOUNT_ALERT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const VERY_NEW_ACCOUNT_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+const NEW_ACCOUNT_TIMEOUT_MS = 10 * 60 * 1000;
+
+async function monitorNewAccount(member) {
+  if (member.user.bot) return;
+
+  const accountAgeMs = Date.now() - member.user.createdTimestamp;
+  if (accountAgeMs >= NEW_ACCOUNT_ALERT_AGE_MS) return;
+
+  const ageHours = Math.max(0, Math.floor(accountAgeMs / (60 * 60 * 1000)));
+  const ageText = ageHours < 24
+    ? `${ageHours} hour(s)`
+    : `${Math.floor(ageHours / 24)} day(s)`;
+  let action = "flagged for moderator review";
+
+  // Very recently created accounts are temporarily timed out to reduce the
+  // chance of immediate spam or coordinated disruption. This is not a ban.
+  if (accountAgeMs < VERY_NEW_ACCOUNT_AGE_MS) {
+    const botMember = member.guild.members.me;
+    if (botMember?.permissions.has(PermissionFlagsBits.ModerateMembers) &&
+        member.moderatable) {
+      try {
+        await member.timeout(
+          NEW_ACCOUNT_TIMEOUT_MS,
+          "Timi security: newly created account; temporary review timeout"
+        );
+        action = "temporarily timed out for 10 minutes";
+      } catch (error) {
+        console.error("Could not apply new-account timeout:", error.message);
+      }
+    } else {
+      action = "flagged; timeout unavailable because of bot permissions or role hierarchy";
+    }
+  }
+
+  const channel = member.guild.channels.cache.find(
+    item => item.type === ChannelType.GuildText && item.name === "timi"
+  );
+  if (!channel?.isTextBased() || !channel.isSendable()) return;
+
+  await channel.send({
+    content: `New-account security alert: <@${member.id}> joined with an account approximately ${ageText} old. Account created: <t:${Math.floor(member.user.createdTimestamp / 1000)}:F>. Action: ${action}. Review the account and server audit logs before granting roles or access.`,
+    allowedMentions: { parse: [] }
+  }).catch(error => console.error("Could not send new-account alert:", error.message));
+}
+
 async function monitorJoinBurst(member) {
   if (member.user.bot) return;
   const guildId = member.guild.id;
@@ -216,6 +263,9 @@ client.on("guildMemberAdd", member => {
   });
   monitorJoinBurst(member).catch(error => {
     console.error("Join-burst monitoring failed:", error.message);
+  });
+  monitorNewAccount(member).catch(error => {
+    console.error("New-account monitoring failed:", error.message);
   });
 });
 
