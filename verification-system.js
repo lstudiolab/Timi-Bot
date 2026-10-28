@@ -78,7 +78,7 @@ function json(res, status, body, extraHeaders = {}) {
   res.end(data);
 }
 function allowedFrontendOrigin() {
-  return (process.env.FRONTEND_ORIGIN || "").trim().replace(/\\/$/, "");
+  return (process.env.FRONTEND_ORIGIN || "").trim().replace(/\/$/, "");
 }
 function apiHeaders(req) {
   const origin = req.headers.origin;
