@@ -35,8 +35,12 @@ if (fs.existsSync(commandsPath)) {
 }
 
 async function registerSlashCommands() {
-  if (!clientId) {
-    console.error("Missing CLIENT_ID. Add your Discord application ID to .env; slash commands were not registered.");
+  if (!clientId || !/^\\d+$/.test(clientId)) {
+    console.error("CLIENT_ID is missing or invalid. Put your Discord application ID in .env; slash commands were not registered.");
+    return;
+  }
+  if (guildId && !/^\\d+$/.test(guildId)) {
+    console.error("GUILD_ID is invalid. Put your test server ID in .env or leave GUILD_ID blank; slash commands were not registered.");
     return;
   }
 
