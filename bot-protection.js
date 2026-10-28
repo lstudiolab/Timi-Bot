@@ -106,6 +106,16 @@ async function restrictBot(member, client) {
   }
 
   const channel = await getConfirmationChannel(guild, client);
+  const key = guild.id + ":" + member.id;
+  const record = {
+    messageId: null,
+    channelId: channel.id,
+    overwrites: [...guild.channels.cache.values()]
+      .filter(target => target.id !== channel.id && target.permissionOverwrites)
+      .map(target => snapshotOverwrite(target, member.id))
+  };
+  pending.set(key, record);
+  savePending();
 
   for (const target of guild.channels.cache.values()) {
     if (target.id === channel.id || !target.permissionOverwrites) continue;
@@ -116,10 +126,9 @@ async function restrictBot(member, client) {
       Connect: false,
       Speak: false
     }, { reason: "Temporarily restrict bot pending Timi approval" }).catch(error => {
-      console.error(`Could not restrict bot in channel ${target.id}:`, error.message);
+      console.error("Could not restrict bot in channel " + target.id + ":", error.message);
     });
   }
-
   // A bot with Administrator bypasses channel overwrites; Discord does not allow Timi to override that.
   const embed = new EmbedBuilder()
     .setColor(0x808080)
@@ -144,7 +153,9 @@ async function restrictBot(member, client) {
   );
 
   const message = await channel.send({ embeds: [embed], components: [row] });
-  pending.set(`${guild.id}:${member.id}`, { messageId: message.id, channelId: channel.id });
+  record.messageId = message.id;
+  pending.set(key, record);
+  savePending();
 }
 
 async function handleInteraction(interaction, client) {
