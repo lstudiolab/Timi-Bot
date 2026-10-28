@@ -67,51 +67,63 @@ async function registerSlashCommands() {
 }
 
 async function ensurePrivateTimiChannel(guild) {
+  const botMember = guild.members.me || await guild.members.fetch(client.user.id);
+  if (!botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
+    console.error(`Cannot ensure private #timi in ${guild.name}: Manage Channels is missing.`);
+    return null;
+  }
+
+  const overwrites = [
+    {
+      id: guild.roles.everyone.id,
+      deny: [PermissionFlagsBits.ViewChannel]
+    },
+    {
+      id: guild.ownerId,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory
+      ]
+    },
+    {
+      id: client.user.id,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.EmbedLinks,
+        PermissionFlagsBits.ManageMessages
+      ]
+    }
+  ];
+
   const existing = guild.channels.cache.find(
     channel => channel.type === ChannelType.GuildText && channel.name === "timi"
   );
-  if (existing) return existing;
 
-  const botMember = guild.members.me || await guild.members.fetch(client.user.id);
-  if (!botMember.permissions.has(PermissionFlagsBits.ManageChannels)) {
-    console.error(`Cannot create private #timi in ${guild.name}: Manage Channels is missing.`);
-    return null;
+  if (existing) {
+    // Repair access on an existing #timi instead of accidentally leaving it public.
+    await existing.permissionOverwrites.set(
+      overwrites,
+      "Enforce owner-only access to Timi moderation channel"
+    );
+    return existing;
   }
 
   return guild.channels.create({
     name: "timi",
     type: ChannelType.GuildText,
     topic: "Private moderation alerts and security decisions for the server owner.",
-    permissionOverwrites: [
-      {
-        id: guild.roles.everyone.id,
-        deny: [PermissionFlagsBits.ViewChannel]
-      },
-      {
-        id: guild.ownerId,
-        allow: [
-          PermissionFlagsBits.ViewChannel,
-          PermissionFlagsBits.SendMessages,
-          PermissionFlagsBits.ReadMessageHistory
-        ]
-      },
-      {
-        id: client.user.id,
-        allow: [
-          PermissionFlagsBits.ViewChannel,
-          PermissionFlagsBits.SendMessages,
-          PermissionFlagsBits.ReadMessageHistory,
-          PermissionFlagsBits.EmbedLinks,
-          PermissionFlagsBits.ManageMessages
-        ]
-      }
-    ],
+    permissionOverwrites: overwrites,
     reason: "Create private owner-only Timi moderation channel"
   });
 }
 
 async function initializeGuild(guild) {
   try {
+    // Warm the settings cache during startup/join, not on the first live message.
+    commands.get("moderationconfig")?.getSettings?.(guild);
     await ensurePrivateTimiChannel(guild);
   } catch (error) {
     console.error(`Could not ensure private #timi in ${guild.name}:`, error.message);
