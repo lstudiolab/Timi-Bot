@@ -9,6 +9,8 @@ const MAX_MESSAGES_PER_GUILD = 25_000;
 let store = { guilds: {} };
 let loaded = false;
 let writeQueue = Promise.resolve();
+let persistTimer = null;
+let dirty = false;
 
 function load() {
   if (loaded) return;
@@ -34,13 +36,45 @@ function guildData(guildId) {
 
 function persist() {
   load();
-  writeQueue = writeQueue.then(async () => {
-    await fs.promises.mkdir(DATA_DIR, { recursive: true });
-    const temp = STORE_PATH + ".tmp";
-    await fs.promises.writeFile(temp, JSON.stringify(store), "utf8");
-    await fs.promises.rename(temp, STORE_PATH);
-  }).catch(error => console.error("Could not persist recovery backup:", error.message));
+  dirty = true;
+  if (persistTimer) return writeQueue;
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    if (!dirty) return;
+    dirty = false;
+    const snapshot = JSON.stringify(store);
+    writeQueue = writeQueue.then(async () => {
+      await fs.promises.mkdir(DATA_DIR, { recursive: true });
+      const temp = STORE_PATH + ".tmp";
+      await fs.promises.writeFile(temp, snapshot, "utf8");
+      await fs.promises.rename(temp, STORE_PATH);
+    }).catch(error => {
+      dirty = true;
+      console.error("Could not persist recovery backup:", error.message);
+    });
+  }, 750);
   return writeQueue;
+}
+
+async function flushPersist() {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+  if (dirty) {
+    dirty = false;
+    const snapshot = JSON.stringify(store);
+    writeQueue = writeQueue.then(async () => {
+      await fs.promises.mkdir(DATA_DIR, { recursive: true });
+      const temp = STORE_PATH + ".tmp";
+      await fs.promises.writeFile(temp, snapshot, "utf8");
+      await fs.promises.rename(temp, STORE_PATH);
+    }).catch(error => {
+      dirty = true;
+      console.error("Could not persist recovery backup:", error.message);
+    });
+  }
+  await writeQueue;
 }
 
 function prune(data) {
@@ -82,14 +116,14 @@ async function snapshotGuild(guild) {
     data.channels[channel.id] = serializeChannel(channel);
   }
   prune(data);
-  await persist();
+  await flushPersist();
 }
 
 async function snapshotChannel(channel) {
   if (!channel.guild || channel.isThread?.()) return;
   const data = guildData(channel.guild.id);
   data.channels[channel.id] = serializeChannel(channel);
-  await persist();
+  await flushPersist();
 }
 
 async function backupMessage(message) {
@@ -112,7 +146,7 @@ async function backupMessage(message) {
   };
   data.messages.push(item);
   prune(data);
-  await persist();
+  persist();
 }
 
 function buildChannelOptions(saved, guild) {
@@ -201,7 +235,7 @@ async function restoreDeletedChannel(guild, channelId, logChannel) {
   }
 
   saved.deletedAt = Date.now();
-  await persist();
+  await flushPersist();
   if (logChannel?.isSendable()) {
     await logChannel.send(
       `Recovery complete: recreated #${saved.name}. Reposted ${archived.length} archived message(s) from the last 7 days. These are archival copies with new message IDs; attachment links may expire, and messages sent before backup was enabled cannot be recovered.`
@@ -215,4 +249,4 @@ async function restoreRecentDeletedChannels(guild, deletedIds, logChannel) {
   for (const id of uniqueIds) await restoreDeletedChannel(guild, id, logChannel);
 }
 
-module.exports = { snapshotGuild, snapshotChannel, backupMessage, restoreRecentDeletedChannels };
+module.exports = { snapshotGuild, snapshotChannel, backupMessage, restoreRecentDeletedChannels, flushPersist };
