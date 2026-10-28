@@ -16,7 +16,7 @@ const STATE_PATH = path.join(__dirname, "data", "bot-protection-state.json");
 function savePending() {
   fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
   const temp = STATE_PATH + ".tmp";
-  fs.writeFileSync(temp, JSON.stringify({ pending: Object.fromEntries(pending) }, null, 2) + "\\n", "utf8");
+  fs.writeFileSync(temp, JSON.stringify({ pending: Object.fromEntries(pending) }, null, 2) + "\n", "utf8");
   fs.renameSync(temp, STATE_PATH);
 }
 
