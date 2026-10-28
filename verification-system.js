@@ -145,11 +145,22 @@ function startWebServer(client) {
     try {
       const url = new URL(req.url, "http://localhost");
       if (req.method === "GET" && url.pathname === "/health") return json(res, 200, { ok: true, service: "timi-verification" });
+      if (req.method === "GET" && url.pathname === "/style.css") {
+        const asset = fs.readFileSync(path.join(__dirname, "public", "style.css"));
+        res.writeHead(200, { "Content-Type": "text/css; charset=utf-8", "Content-Length": asset.length, "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff" });
+        return res.end(asset);
+      }
+      if (req.method === "GET" && url.pathname === "/app.js") {
+        const asset = fs.readFileSync(path.join(__dirname, "public", "app.js"));
+        res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8", "Content-Length": asset.length, "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff" });
+        return res.end(asset);
+      }
       if (req.method === "GET" && url.pathname === "/verify") {
         const token = url.searchParams.get("session") || "";
         const session = sessions.get(token);
         if (!session || session.expiresAt < Date.now() || session.used) return html(res, 400, page("", "This verification link expired. Click Verify in Discord to create a new one."));
-        return html(res, 200, page(token));
+        const frontend = fs.readFileSync(path.join(__dirname, "public", "index.html"), "utf8");
+        return html(res, 200, frontend);
       }
       if (req.method === "POST" && url.pathname === "/api/request-code") {
         let raw = "";
