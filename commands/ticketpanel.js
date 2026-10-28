@@ -226,8 +226,16 @@ async function sendTranscript(channel, settings, guild) {
   if (!settings.transcriptChannelId) return;
   const destination = await guild.channels.fetch(settings.transcriptChannelId).catch(() => null);
   if (!destination?.isTextBased() || !destination.isSendable()) return;
-  const fetched = await channel.messages.fetch({ limit: 100 }).catch(() => null);
-  const messages = fetched ? [...fetched.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp) : [];
+  const messages = [];
+  let before;
+  for (let page = 0; page < 50; page++) {
+    const fetched = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) }).catch(() => null);
+    if (!fetched?.size) break;
+    messages.push(...fetched.values());
+    before = fetched.last().id;
+    if (fetched.size < 100) break;
+  }
+  messages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
   const lines = messages.map(message => {
     const body = String(message.content || "").replace(/\r?\n/g, " ");
     const files = [...message.attachments.values()].map(file => file.url).join(" ");
