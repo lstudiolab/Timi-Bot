@@ -304,6 +304,9 @@ client.on("messageCreate", async message => {
     pruneQueue(state.links, now - SPAM_WINDOW_MS);
 
     state.recent.push({ id: message.id, time: now });
+    if (state.recent.length > MAX_TRACKED_MESSAGES) {
+      state.recent.splice(0, state.recent.length - MAX_TRACKED_MESSAGES);
+    }
 
     const content = normalizeContent(message.content || "");
     const mentionCount = message.mentions.users.size + message.mentions.roles.size;
@@ -345,13 +348,26 @@ client.on("messageCreate", async message => {
       return;
     }
 
-    if (content.length >= 4) state.fingerprints.push({ content, time: now });
+    if (content.length >= 4) {
+      state.fingerprints.push({ content, time: now });
+      if (state.fingerprints.length > 50) {
+        state.fingerprints.splice(0, state.fingerprints.length - 50);
+      }
+    }
+    if (state.links.length > 50) {
+      state.links.splice(0, state.links.length - 50);
+    }
 
     // Periodically prune stale users; no timer/interval is needed.
     processedMessages++;
     if (processedMessages >= CLEANUP_EVERY_MESSAGES) {
       processedMessages = 0;
+      const recentCutoff = now - SPAM_WINDOW_MS;
+      const duplicateCutoff = now - DUPLICATE_WINDOW_MS;
       for (const [stateId, entry] of spamState) {
+        pruneQueue(entry.recent, recentCutoff);
+        pruneQueue(entry.fingerprints, duplicateCutoff);
+        pruneQueue(entry.links, recentCutoff);
         if (!entry.recent.length && !entry.fingerprints.length && !entry.links.length) {
           spamState.delete(stateId);
         }
