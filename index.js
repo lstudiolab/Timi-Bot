@@ -13,6 +13,7 @@ const {
 
 const botProtection = require("./bot-protection");
 const ticketPanel = require("./commands/ticketpanel");
+const recoveryBackup = require("./recovery-backup");
 
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.CLIENT_ID;
@@ -133,7 +134,10 @@ async function initializeGuild(guild) {
 
 client.once("ready", async () => {
   console.log(`Timi is online as ${client.user.tag}`);
-  await Promise.allSettled([...client.guilds.cache.values()].map(initializeGuild));
+  await Promise.allSettled([...client.guilds.cache.values()].map(async guild => {
+    await initializeGuild(guild);
+    await recoveryBackup.snapshotGuild(guild);
+  }));
   try {
     await registerSlashCommands();
   } catch (error) {
@@ -143,6 +147,20 @@ client.once("ready", async () => {
 
 client.on("guildCreate", guild => {
   initializeGuild(guild);
+  recoveryBackup.snapshotGuild(guild).catch(error => console.error("Initial recovery snapshot failed:", error.message));
+});
+
+client.on("channelCreate", channel => {
+  recoveryBackup.snapshotChannel(channel).catch(error => console.error("Channel backup failed:", error.message));
+});
+
+client.on("channelUpdate", (_oldChannel, newChannel) => {
+  recoveryBackup.snapshotChannel(newChannel).catch(error => console.error("Channel backup update failed:", error.message));
+});
+
+// Archive messages continuously; the recovery module retains the most recent seven days.
+client.on("messageCreate", message => {
+  recoveryBackup.backupMessage(message).catch(error => console.error("Message backup failed:", error.message));
 });
 
 client.on("interactionCreate", async interaction => {
@@ -309,7 +327,7 @@ async function handleChannelDeletion(channel) {
   const key = `${guild.id}:${actor.id}`;
   const history = (channelDeletionHistory.get(key) || [])
     .filter(item => now - item.time <= CHANNEL_DELETE_WINDOW_MS);
-  history.push({ time: now, channelId: channel.id });
+  history.push({ time: now, channelId: channel.id, channelName: channel.name });
   channelDeletionHistory.set(key, history);
 
   const logChannel = guild.channels.cache.find(
@@ -324,7 +342,7 @@ async function handleChannelDeletion(channel) {
 
   if (history.length < CHANNEL_DELETE_THRESHOLD) return;
 
-  // Fail closed: only quarantine members whose highest role is below Timi's.
+  // Once a deletion burst is confirmed, recreate all channels deleted in this burst\n  // and repost the archived messages collected during the previous seven days.\n  await recoveryBackup.restoreRecentDeletedChannels(\n    guild,\n    history.map(item => item.channelId),\n    logChannel\n  );\n\n  // Fail closed: only quarantine members whose highest role is below Timi's.
   // The server owner is always exempt. This avoids pretending Timi can
   // enforce actions against members above its role in Discord's hierarchy.
   if (!actor.moderatable || !botMember.permissions.has(PermissionFlagsBits.ModerateMembers) ||
