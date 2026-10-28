@@ -434,7 +434,7 @@ async function handleInteraction(interaction, client) {
     }
     const message = await interaction.channel.send(buildPublicPanel(getSettings(interaction.guildId)));
     rememberPublishedPanel(interaction.guildId, interaction.channelId, message.id);
-    await interaction.reply({ content: "Ticket panel published in this channel. You can edit it anytime with /ticketconfig; saved changes will update this panel.", ephemeral: true });
+    await interaction.reply({ content: "Ticket panel published in this channel. Use /panelconfig to customize it later; saved changes will update this panel.", ephemeral: true });
     return true;
   }
 
@@ -443,10 +443,21 @@ async function handleInteraction(interaction, client) {
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("ticketconfig")
-    .setDescription("Customize and publish the ticket panel.")
+    .setName("ticketpanel")
+    .setDescription("Create and publish a ticket panel, then customize its initial settings.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   async execute(interaction) {
+    if (!interaction.inGuild()) {
+      await interaction.reply({ content: "This command can only be used in a server.", ephemeral: true });
+      return;
+    }
+    if (!isManager(interaction)) {
+      await interaction.reply({ content: "You need Manage Server permission to configure tickets.", ephemeral: true });
+      return;
+    }
+    await interaction.reply(buildConfigPanel(getSettings(interaction.guildId)));
+  },
+  async executeConfig(interaction) {
     if (!interaction.inGuild()) {
       await interaction.reply({ content: "This command can only be used in a server.", ephemeral: true });
       return;
