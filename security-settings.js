@@ -41,4 +41,14 @@ function saveSettings(guildId, settings) {
   cache = store;
   return getSettings(guildId);
 }
-module.exports = { DEFAULTS, getSettings, saveSettings };
+function resetSettings(guildId) {
+  const store = readStore();
+  store[guildId] = { ...DEFAULTS };
+  fs.mkdirSync(path.dirname(FILE), { recursive: true });
+  const temporary = FILE + ".tmp";
+  fs.writeFileSync(temporary, JSON.stringify(store, null, 2) + "\n", "utf8");
+  fs.renameSync(temporary, FILE);
+  cache = store;
+  return getSettings(guildId);
+}
+module.exports = { DEFAULTS, getSettings, saveSettings, resetSettings };
