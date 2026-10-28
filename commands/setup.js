@@ -4,7 +4,7 @@ const {
   SlashCommandBuilder
 } = require("discord.js");
 
-const { getSettings } = require("./moderation-panel");
+const { getSettings, saveSettings } = require("./moderation-panel");
 
 function privateOverwrites(guild, userId, botId) {
   const allowed = {
@@ -91,30 +91,28 @@ module.exports = {
         { name: "timi-confirmations", topic: "Private setup and moderation confirmations for Timi." }
       ];
 
+      const existing = names.find(item => guild.channels.cache.some(
+        candidate => candidate.type === ChannelType.GuildText && candidate.name === item.name
+      ));
+      if (existing) {
+        await interaction.editReply(
+          `A channel named #${existing.name} already exists. Rename or remove it, then run /setup again. No existing channel permissions were changed.`
+        );
+        return;
+      }
+
       const created = [];
       const overwrites = privateOverwrites(guild, interaction.user.id, client.user.id);
 
       for (const item of names) {
-        let channel = guild.channels.cache.find(
-          candidate => candidate.type === ChannelType.GuildText && candidate.name === item.name
-        );
-
-        if (!channel) {
-          channel = await guild.channels.create({
-            name: item.name,
-            type: ChannelType.GuildText,
-            topic: item.topic,
-            permissionOverwrites: overwrites,
-            reason: `Timi setup requested by ${interaction.user.tag}`
-          });
-          created.push(channel);
-        } else {
-          // Existing channels are not reused automatically because their permissions may be public.
-          await interaction.editReply(
-            `A channel named #${item.name} already exists. Rename or remove it, then run /setup again. No existing channel permissions were changed.`
-          );
-          return;
-        }
+        const channel = await guild.channels.create({
+          name: item.name,
+          type: ChannelType.GuildText,
+          topic: item.topic,
+          permissionOverwrites: overwrites,
+          reason: `Timi setup requested by ${interaction.user.tag}`
+        });
+        created.push(channel);
       }
 
       const logChannel = created.find(channel => channel.name === "timi-logs");
@@ -123,6 +121,7 @@ module.exports = {
       // Save the newly created log channel as the moderation panel's log destination.
       const settings = getSettings(guild);
       settings.logChannelId = logChannel.id;
+      saveSettings(guild.id, settings);
 
       // Store the channel IDs in the guild's channel topic so administrators can identify them.
       await confirmationChannel.send({
@@ -130,7 +129,7 @@ module.exports = {
       });
 
       await interaction.editReply(
-        `Setup complete. Created <#${logChannel.id}> and <#${confirmationChannel.id}>. They are private to you, the server owner, and Timi. The log channel is selected for moderation reports. If you need these settings to survive a restart, select the log channel in /moderation-panel as well.`
+        `Setup complete. Created <#${logChannel.id}> and <#${confirmationChannel.id}>. They are private to you, the server owner, and Timi. The log channel is selected for moderation reports.`
       );
     } catch (error) {
       console.error("Setup command failed:", error);
