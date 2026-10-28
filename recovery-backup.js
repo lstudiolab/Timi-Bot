@@ -56,8 +56,14 @@ function prune(guildId) {
     // Keep channel configuration; evict oldest archived messages first to enforce the quota.
     while (usage(guildId) > MAX_GUILD_BYTES) {
       const oldest = db.prepare("SELECT message_id FROM messages WHERE guild_id=? ORDER BY created_at ASC LIMIT 1").get(guildId);
-      if (!oldest) break;
-      db.prepare("DELETE FROM messages WHERE guild_id=? AND message_id=?").run(guildId, oldest.message_id);
+      if (oldest) {
+        db.prepare("DELETE FROM messages WHERE guild_id=? AND message_id=?").run(guildId, oldest.message_id);
+        continue;
+      }
+      // If channel metadata alone exceeds the cap, evict the oldest snapshots as a last resort.
+      const oldChannel = db.prepare("SELECT channel_id FROM channels WHERE guild_id=? ORDER BY saved_at ASC LIMIT 1").get(guildId);
+      if (!oldChannel) break;
+      db.prepare("DELETE FROM channels WHERE guild_id=? AND channel_id=?").run(guildId, oldChannel.channel_id);
     }
   });
   tx();
