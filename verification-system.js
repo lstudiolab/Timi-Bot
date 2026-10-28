@@ -237,10 +237,20 @@ async function handleInteraction(interaction, client) {
   if (interaction.customId === "verify:start") {
     const token = randomToken();
     sessions.set(token, { userId: interaction.user.id, guildId: interaction.guildId, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL_MS, attempts: 0, used: false });
-    const link = makeSessionUrl(token);
+    let link;
+    try {
+      link = makeSessionUrl(token);
+    } catch (error) {
+      sessions.delete(token);
+      console.error("Could not create verification URL:", error.message);
+      await interaction.reply({
+        content: "The verification website is not configured yet. Please contact the server owner.",
+        ephemeral: true
+      });
+      return true;
+    }
     await interaction.reply({
-      content: "Open the secure verification page, enter your email, then return here and use /verifycode to enter the code.",
-      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel("Open verification website").setStyle(ButtonStyle.Link).setURL(link))],
+      content: `Open this secure verification link: ${link}\n\nEnter your email on the website. After the code is sent, return to Discord and use /verifycode. This link expires in 30 minutes and is private to your verification session.`,
       ephemeral: true
     });
     return true;
