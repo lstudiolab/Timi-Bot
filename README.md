@@ -42,7 +42,7 @@ The bot needs Manage Channels to create and delete tickets. Transcript delivery 
 - Available anti-spam sanctions: timeout, kick, ban, or delete messages only.
 - Moderation actions are logged to the selected log channel when configured.
 - `/warn` records a member warning, `/warnings` views recent warning history, and `/clearwarnings` clears a member's warnings.
-- `/userinfo`, `/serverinfo`, and `/ping` provide utility information.
+- `/userinfo`, `/serverinfo`, and `/ping` provide utility information. `/role` adds or removes a role with hierarchy checks; it refuses to assign Administrator roles unless the operator is an Administrator.
 
 Anti-spam detection is heuristic, so test thresholds in a private server before relying on automatic sanctions. Moderators with Manage Messages or Administrator are exempt. Use the narrowest permissions necessary.
 
@@ -56,7 +56,7 @@ Anti-spam detection is heuristic, so test thresholds in a private server before 
 
 Security automations use Discord audit logs and permission hierarchy. They cannot override the server owner, Administrator permission, or members above Timi's role.
 
-Use `/configreset` to reset one feature section to default settings. Ticket public panels are refreshed; leveling XP and economy balances are preserved. Warning records are not cleared by configuration resets.\n\n## Welcome messages
+Use `/configreset` to reset a feature section to default settings. Ticket public panels are refreshed; leveling XP and economy balances are preserved. Warning records are not cleared by configuration resets.\n\n## Event logging\n\nUse `/logconfig` to set a destination and independently enable member joins/leaves, message edits/deletions, channel changes, role changes, and ban/unban events. Event logging is disabled until configured. Deleted/edited message content may be sensitive; choose a private log channel and enable only the event types you actually need.\n\n## Welcome messages
 
 Use `/welcomeconfig` to enable or disable welcome messages, select the destination channel, and customize the message. Supported placeholders are `{user}`, `{username}`, `{server}`, and `{memberCount}`. Welcome messages are disabled until configured.
 
@@ -75,7 +75,7 @@ Leveling is disabled by default. The progression uses `level = floor(sqrt(XP / 1
 
 Economy data is stored per server. Transfers validate the amount, block self-payments and bots, require the recipient to belong to the server, and reject insufficient balances.
 
-## Recovery backups
+## Mini-games\n\nUse `/coinflip` to flip a coin or `/rps` to play rock-paper-scissors against Timi. These commands do not involve real money.\n\n## Recovery backups
 
 Recovery data uses SQLite with gzip-compressed records. It retains a rolling seven-day archive within per-server storage/message caps and migrates the previous JSON backup when possible. Channel restoration is best-effort: Discord permissions, channel types, missing parent categories, thread history, attachment availability, and API limits can prevent exact recovery.
 
