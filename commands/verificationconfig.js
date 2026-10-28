@@ -7,7 +7,7 @@ module.exports = {
     .setName("verificationconfig")
     .setDescription("Configure the verification role and verification channel (server owner only).")
     .addRoleOption(option => option.setName("role").setDescription("Role granted after email verification").setRequired(false))
-    .addChannelOption(option => option.setName("channel").setDescription("Channel for verification completion notices").setRequired(false))
+    .addChannelOption(option => option.setName("channel").setDescription("Channel where members enter codes and claim usernames").setRequired(false))
     .addStringOption(option => option.setName("title").setDescription("Verification panel title").setMaxLength(200).setRequired(false))
     .addStringOption(option => option.setName("description").setDescription("Verification panel description").setMaxLength(1000).setRequired(false)),
   async execute(interaction, client) {
