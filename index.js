@@ -269,6 +269,122 @@ client.on("guildMemberAdd", member => {
   });
 });
 
+const channelDeletionHistory = new Map();
+const CHANNEL_DELETE_WINDOW_MS = 60_000;
+const CHANNEL_DELETE_THRESHOLD = 3;
+const CHANNEL_DELETE_TIMEOUT_MS = 60 * 60 * 1000;
+
+async function handleChannelDeletion(channel) {
+  if (!channel.guild) return;
+  const guild = channel.guild;
+
+  const botMember = guild.members.me;
+  if (!botMember?.permissions.has(PermissionFlagsBits.ViewAuditLog)) {
+    console.warn(`Cannot attribute deleted channels in ${guild.name}: View Audit Log permission is missing.`);
+    return;
+  }
+
+  // Audit log entries can arrive slightly after the channelDelete event.
+  await new Promise(resolve => setTimeout(resolve, 1_200));
+
+  let entry;
+  try {
+    const logs = await guild.fetchAuditLogs({ type: 12, limit: 6 });
+    entry = logs.entries.find(item =>
+      item.target?.id === channel.id &&
+      Date.now() - item.createdTimestamp < 15_000
+    );
+  } catch (error) {
+    console.error("Could not read channel deletion audit log:", error.message);
+    return;
+  }
+
+  const actorId = entry?.executor?.id;
+  if (!actorId || actorId === client.user.id || actorId === guild.ownerId) return;
+
+  const actor = await guild.members.fetch(actorId).catch(() => null);
+  if (!actor || actor.user.bot) return;
+
+  const now = Date.now();
+  const key = `${guild.id}:${actor.id}`;
+  const history = (channelDeletionHistory.get(key) || [])
+    .filter(item => now - item.time <= CHANNEL_DELETE_WINDOW_MS);
+  history.push({ time: now, channelId: channel.id });
+  channelDeletionHistory.set(key, history);
+
+  const logChannel = guild.channels.cache.find(
+    item => item.type === ChannelType.GuildText && item.name === "timi"
+  );
+  if (logChannel?.isTextBased() && logChannel.isSendable()) {
+    await logChannel.send({
+      content: `Security alert: <@${actor.id}> deleted channel ${channel.name} (${channel.id}). Count: ${history.length} in 60 seconds.`,
+      allowedMentions: { parse: [] }
+    }).catch(() => {});
+  }
+
+  if (history.length < CHANNEL_DELETE_THRESHOLD) return;
+
+  // Fail closed: only quarantine members whose highest role is below Timi's.
+  // The server owner is always exempt. This avoids pretending Timi can
+  // enforce actions against members above its role in Discord's hierarchy.
+  if (!actor.moderatable || !botMember.permissions.has(PermissionFlagsBits.ModerateMembers) ||
+      !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+    if (logChannel?.isTextBased() && logChannel.isSendable()) {
+      await logChannel.send({
+        content: `Critical security alert: <@${actor.id}> reached the channel-deletion threshold, but Timi could not quarantine them because of missing permissions or role hierarchy. Manually review the audit log immediately.`,
+        allowedMentions: { parse: [] }
+      }).catch(() => {});
+    }
+    channelDeletionHistory.delete(key);
+    return;
+  }
+
+  try {
+    await actor.timeout(
+      CHANNEL_DELETE_TIMEOUT_MS,
+      `Timi anti-nuke: deleted ${history.length} channels within 60 seconds`
+    );
+
+    const removableRoles = actor.roles.cache.filter(role =>
+      role.id !== guild.id &&
+      !role.managed &&
+      role.editable
+    );
+
+    for (const role of removableRoles.values()) {
+      await actor.roles.remove(
+        role,
+        "Timi anti-nuke quarantine after repeated channel deletion"
+      ).catch(error => {
+        console.error(`Could not remove role ${role.id} from ${actor.id}:`, error.message);
+      });
+    }
+
+    if (logChannel?.isTextBased() && logChannel.isSendable()) {
+      await logChannel.send({
+        content: `Anti-nuke action: <@${actor.id}> was timed out for 60 minutes and Timi attempted to remove all editable, non-managed roles after deleting ${history.length} channels in 60 seconds. Review the audit log and restore access only after investigation.`,
+        allowedMentions: { parse: [] }
+      }).catch(() => {});
+    }
+  } catch (error) {
+    console.error("Anti-nuke quarantine failed:", error.message);
+    if (logChannel?.isTextBased() && logChannel.isSendable()) {
+      await logChannel.send({
+        content: `Critical security alert: Timi could not complete quarantine for <@${actor.id}>. Error: ${error.message}`,
+        allowedMentions: { parse: [] }
+      }).catch(() => {});
+    }
+  } finally {
+    channelDeletionHistory.delete(key);
+  }
+}
+
+client.on("channelDelete", channel => {
+  handleChannelDeletion(channel).catch(error => {
+    console.error("Anti-nuke channel deletion handler failed:", error.message);
+  });
+});
+
 const spamState = new Map();
 const SPAM_WINDOW_MS = 8_000;
 const DUPLICATE_WINDOW_MS = 20_000;
