@@ -229,11 +229,11 @@ async function sendTranscript(channel, settings, guild) {
   const fetched = await channel.messages.fetch({ limit: 100 }).catch(() => null);
   const messages = fetched ? [...fetched.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp) : [];
   const lines = messages.map(message => {
-    const body = String(message.content || "").replace(/\\r?\\n/g, " ");
+    const body = String(message.content || "").replace(/\r?\n/g, " ");
     const files = [...message.attachments.values()].map(file => file.url).join(" ");
     return "[" + new Date(message.createdTimestamp).toISOString() + "] " + message.author.tag + ": " + body + (files ? " " + files : "");
   });
-  const transcript = (lines.join("\\n") || "No messages were available for this ticket.").slice(0, 450000);
+  const transcript = (lines.join("\n") || "No messages were available for this ticket.").slice(0, 450000);
   const file = new AttachmentBuilder(Buffer.from(transcript, "utf8"), { name: "transcript-" + channel.id + ".txt" });
   const ownerId = String(channel.topic || "").slice("timi-ticket-owner:".length);
   await destination.send({ content: "Transcript for ticket #" + channel.name + " (owner <@" + ownerId + ">).", files: [file], allowedMentions: { parse: [] } });
