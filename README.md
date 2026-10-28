@@ -24,9 +24,9 @@ Run `/setup` with Manage Server permission to create Timi's private support/log 
 
 ## Ticket system
 
-- `/ticketpanel` creates the configuration message for the first time and opens that same saved configuration message on later uses.
-- `/panelconfig` reopens or updates the existing configuration message.
-- Edit the panel title, description, open-ticket button label, the opening message inside a ticket, close button label, and category name.
+- `/ticketpanel` opens the private ticket builder used to configure and publish the first public panel.
+- `/panelconfig` opens the private editor for changing an existing public panel. These commands share saved per-server settings; configuration controls remain private.
+- Edit the panel title, description, six-digit hexadecimal accent color, open-ticket button label, the opening message inside a ticket, close button label, and category name.
 - Select up to ten support roles. These roles and server managers are granted visibility to private tickets.
 - Select a text channel for transcripts. Closing a ticket sends a text transcript (messages, author names, timestamps, and attachment URLs) before deletion. The transcript feature is limited to the most recent 5,000 messages that Discord will return.
 - Adjust the close delay from zero to 60 seconds.
