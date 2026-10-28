@@ -5,7 +5,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("warnings")
     .setDescription("View recorded warnings for a member.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers | PermissionFlagsBits.ManageGuild)
     .addUserOption(option => option.setName("member").setDescription("Member to inspect").setRequired(true)),
   async execute(interaction) {
     if (!interaction.inGuild()) {
