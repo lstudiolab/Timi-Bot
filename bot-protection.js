@@ -21,7 +21,8 @@ function savePending() {
 }
 
 try {
-  const saved = JSON.parse(fs.readFileSync(STATE_PATH, "utf8"));
+  const raw = fs.readFileSync(STATE_PATH, "utf8");
+  const saved = JSON.parse(raw.replace(/\\\\n$/, ""));
   for (const [key, record] of Object.entries(saved.pending || {})) pending.set(key, record);
 } catch (error) {
   if (error.code !== "ENOENT") console.error("Could not load bot approval state:", error.message);
