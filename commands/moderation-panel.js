@@ -350,8 +350,8 @@ async function handleInteraction(interaction) {
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("moderation-panel")
-    .setDescription("Open the moderation kit configuration panel.")
+    .setName("moderationconfig")
+    .setDescription("Configure Timi moderation and anti-spam protection.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   async execute(interaction) {
     if (!interaction.inGuild()) {
