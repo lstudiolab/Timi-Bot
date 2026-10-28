@@ -10,6 +10,8 @@ const {
   Routes
 } = require("discord.js");
 
+const botProtection = require("./bot-protection");
+
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.CLIENT_ID;
 const guildId = process.env.GUILD_ID;
@@ -70,6 +72,11 @@ client.once("ready", async () => {
 
 client.on("interactionCreate", async interaction => {
   try {
+    if (interaction.customId?.startsWith("botguard:")) {
+      await botProtection.handleInteraction(interaction, client);
+      return;
+    }
+
     if (interaction.isChatInputCommand()) {
       const command = commands.get(interaction.commandName);
       if (command) await command.execute(interaction, client);
@@ -91,6 +98,12 @@ client.on("interactionCreate", async interaction => {
       }).catch(() => {});
     }
   }
+});
+
+client.on("guildMemberAdd", member => {
+  botProtection.onGuildMemberAdd(member, client).catch(error => {
+    console.error("Bot protection failed:", error.message);
+  });
 });
 
 const spamState = new Map();
