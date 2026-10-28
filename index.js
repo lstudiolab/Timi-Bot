@@ -15,6 +15,7 @@ const botProtection = require("./bot-protection");
 const ticketPanel = require("./commands/ticketpanel");
 const recoveryBackup = require("./recovery-backup");
 const securitySettings = require("./security-settings");
+const leveling = require("./leveling");
 
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.CLIENT_ID;
@@ -607,6 +608,8 @@ client.on("messageCreate", async message => {
     if (state.links.length > 50) {
       state.links.splice(0, state.links.length - 50);
     }
+
+    await leveling.handleMessage(message);
 
     // Periodically prune stale users; no timer/interval is needed.
     processedMessages++;
