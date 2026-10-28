@@ -219,7 +219,7 @@ async function restoreDeletedChannel(guild, channelId, logChannel) {
       const batch = archived.slice(i, i + 10);
       for (const item of batch) {
         const attachmentText = item.attachments.length
-          ? "\\nAttachments: " + item.attachments.map(file => `${file.name}: ${file.url}`).join(" | ")
+          ? "\nAttachments: " + item.attachments.map(file => `${file.name}: ${file.url}`).join(" | ")
           : "";
         const body = [
           `[Recovered archive • original message ${item.id} • <t:${Math.floor(item.createdAt / 1000)}:F>]`,
