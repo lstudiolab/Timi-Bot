@@ -134,6 +134,7 @@ async function initializeGuild(guild) {
 
 client.once("ready", async () => {
   console.log(`Timi is online as ${client.user.tag}`);
+  await botProtection.recoverPending(client).catch(error => console.error("Could not recover interrupted bot approvals:", error.message));
   await Promise.allSettled([...client.guilds.cache.values()].map(async guild => {
     await initializeGuild(guild);
     await recoveryBackup.snapshotGuild(guild);
