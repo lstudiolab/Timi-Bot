@@ -5,9 +5,9 @@ const panelCommand = require("./verifypanel");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("verificationconfig")
-    .setDescription("Configure the verification role and verification channel (server owner only).")
-    .addRoleOption(option => option.setName("role").setDescription("Role granted after email verification").setRequired(false))
-    .addChannelOption(option => option.setName("channel").setDescription("Channel where members enter codes and claim usernames").setRequired(false))
+    .setDescription("Configure the automatic email verification role and panel (server owner only).")
+    .addRoleOption(option => option.setName("role").setDescription("Role granted automatically after website verification").setRequired(false))
+    .addChannelOption(option => option.setName("channel").setDescription("Channel where the verification panel is posted").setRequired(false))
     .addStringOption(option => option.setName("title").setDescription("Verification panel title").setMaxLength(200).setRequired(false))
     .addStringOption(option => option.setName("description").setDescription("Verification panel description").setMaxLength(1000).setRequired(false)),
   async execute(interaction, client) {
@@ -27,7 +27,10 @@ module.exports = {
     const description = interaction.options.getString("description");
     if (!role && !channel && title === null && description === null) {
       await interaction.reply({
-        content: `**Verification settings**\nRole: ${settings.roleId ? `<@&${settings.roleId}>` : "Not configured"}\nVerification channel: ${settings.channelId ? `<#${settings.channelId}>` : "Not configured"}\nPanel title: ${settings.panelTitle}\nPanel description: ${settings.panelDescription}\n\nRun /verificationconfig with one or more options to change settings. Only the server owner can configure this system.`,
+        content: "**Verification settings**\nRole: " + (settings.roleId ? "<@&" + settings.roleId + ">" : "Not configured") +
+          "\nVerification panel channel: " + (settings.channelId ? "<#" + settings.channelId + ">" : "Not configured") +
+          "\nPanel title: " + settings.panelTitle + "\nPanel description: " + settings.panelDescription +
+          "\n\nRun /verificationconfig with one or more options to change settings. Only the server owner can configure this system.",
         ephemeral: true
       });
       return;
@@ -64,7 +67,8 @@ module.exports = {
       }
     }
     await interaction.reply({
-      content: `Verification settings saved.\nRole: ${settings.roleId ? `<@&${settings.roleId}>` : "Not configured"}\nVerification channel: ${settings.channelId ? `<#${settings.channelId}>` : "Not configured"}`,
+      content: "Verification settings saved.\nRole: " + (settings.roleId ? "<@&" + settings.roleId + ">" : "Not configured") +
+        "\nVerification panel channel: " + (settings.channelId ? "<#" + settings.channelId + ">" : "Not configured"),
       ephemeral: true
     });
   }
