@@ -174,7 +174,13 @@ function buildConfigPanel(settings) {
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("ticket:publish").setLabel("Publish Panel").setStyle(ButtonStyle.Primary)
   );
-  return { embeds: [embed], components: [row1, row2] };
+  const row3 = new ActionRowBuilder().addComponents(
+    new RoleSelectMenuBuilder().setCustomId("ticket:support-roles").setPlaceholder("Select support roles").setMinValues(0).setMaxValues(10)
+  );
+  const row4 = new ActionRowBuilder().addComponents(
+    new ChannelSelectMenuBuilder().setCustomId("ticket:transcript-channel").setPlaceholder("Select transcript channel").setChannelTypes(ChannelType.GuildText).setMinValues(0).setMaxValues(1)
+  );
+  return { embeds: [embed], components: [row1, row2, row3, row4] };
 }
 
 function buildPublicPanel(settings) {
