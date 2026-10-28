@@ -243,12 +243,30 @@ async function handleInteraction(interaction, client) {
   return false;
 }
 
+async function recoverPending(client) {
+  for (const [key, record] of pending) {
+    if (record.messageId) continue;
+    const parts = key.split(":");
+    const guild = client.guilds.cache.get(parts[0]);
+    if (guild) await restorePermissions(guild, parts[1], record);
+    pending.delete(key);
+  }
+  savePending();
+}
 module.exports = {
+  recoverPending,
   async onGuildMemberAdd(member, client) {
     if (!member.user.bot || member.id === client.user.id) return;
     try {
       await restrictBot(member, client);
     } catch (error) {
+      const key = member.guild.id + ":" + member.id;
+      const record = pending.get(key);
+      if (record) {
+        await restorePermissions(member.guild, member.id, record);
+        pending.delete(key);
+        savePending();
+      }
       console.error("Bot protection could not process a new bot:", error.message);
     }
   },
