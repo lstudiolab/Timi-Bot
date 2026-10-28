@@ -57,7 +57,14 @@ function hashIp(ip) {
   return crypto.createHmac("sha256", secret).update(String(ip || "unknown")).digest("hex");
 }
 function clientIp(req) {
-  // Do not trust X-Forwarded-For unless explicitly behind a trusted proxy.
+  // Only trust proxy headers when the operator explicitly enables this on a trusted host.
+  if (process.env.TRUST_PROXY === "true") {
+    const forwarded = req.headers["x-forwarded-for"];
+    if (typeof forwarded === "string" && forwarded.length < 1024) {
+      const first = forwarded.split(",")[0].trim();
+      if (first) return first;
+    }
+  }
   return req.socket.remoteAddress || "unknown";
 }
 function json(res, status, body) {
