@@ -17,6 +17,4 @@ jobs:
         run: npm install
       - name: Check JavaScript syntax
         run: |
-          for file in index.js bot-protection.js recovery-backup.js commands/*.js; do
-            node --check "$file"
-          done
+          find . -maxdepth 2 -name '*.js' -not -path './node_modules/*' -print0 | xargs -0 -n1 node --check
