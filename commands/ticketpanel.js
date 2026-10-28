@@ -425,7 +425,7 @@ async function handleInteraction(interaction, client) {
       return true;
     }
     saveSettings(interaction.guildId, settings);
-    await interaction.reply({
+    await interaction.update({
       ...buildConfigPanel(settings),
       content: "Ticket settings saved. Updating published panels..."
     });
@@ -444,7 +444,10 @@ async function handleInteraction(interaction, client) {
     }
     const message = await interaction.channel.send(buildPublicPanel(getSettings(interaction.guildId)));
     rememberPublishedPanel(interaction.guildId, interaction.channelId, message.id);
-    await interaction.reply({ content: "Ticket panel published in this channel. You can edit it anytime with /ticketconfig; saved changes will update this panel.", ephemeral: true });
+    await interaction.update({
+      ...buildConfigPanel(getSettings(interaction.guildId)),
+      content: "Ticket panel published. This setup message has been updated; use it to continue configuring tickets."
+    });
     return true;
   }
 
