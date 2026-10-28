@@ -13,6 +13,7 @@ const {
 
 const botProtection = require("./bot-protection");
 const ticketPanel = require("./commands/ticketpanel");
+const verification = require("./verification-system");
 const recoveryBackup = require("./recovery-backup");
 
 const token = process.env.DISCORD_TOKEN;
@@ -134,6 +135,7 @@ async function initializeGuild(guild) {
 
 client.once("ready", async () => {
   console.log(`Timi is online as ${client.user.tag}`);
+  verification.startWebServer(client);
   await Promise.allSettled([...client.guilds.cache.values()].map(async guild => {
     await initializeGuild(guild);
     await recoveryBackup.snapshotGuild(guild);
@@ -167,6 +169,11 @@ client.on("interactionCreate", async interaction => {
   try {
     if (interaction.customId?.startsWith("botguard:")) {
       await botProtection.handleInteraction(interaction, client);
+      return;
+    }
+
+    if (interaction.customId?.startsWith("verify:")) {
+      await verification.handleInteraction(interaction, client);
       return;
     }
 
