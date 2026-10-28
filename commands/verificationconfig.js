@@ -27,7 +27,7 @@ module.exports = {
     const description = interaction.options.getString("description");
     if (!role && !channel && title === null && description === null) {
       await interaction.reply({
-        content: `**Verification settings**\nRole: ${settings.roleId ? `<@&${settings.roleId}>` : "Not configured"}\nCompletion channel: ${settings.channelId ? `<#${settings.channelId}>` : "Not configured"}\nPanel title: ${settings.panelTitle}\nPanel description: ${settings.panelDescription}\n\nRun /verificationconfig with one or more options to change settings. Only the server owner can configure this system.`,
+        content: `**Verification settings**\nRole: ${settings.roleId ? `<@&${settings.roleId}>` : "Not configured"}\nVerification channel: ${settings.channelId ? `<#${settings.channelId}>` : "Not configured"}\nPanel title: ${settings.panelTitle}\nPanel description: ${settings.panelDescription}\n\nRun /verificationconfig with one or more options to change settings. Only the server owner can configure this system.`,
         ephemeral: true
       });
       return;
@@ -64,7 +64,7 @@ module.exports = {
       }
     }
     await interaction.reply({
-      content: `Verification settings saved.\nRole: ${settings.roleId ? `<@&${settings.roleId}>` : "Not configured"}\nCompletion channel: ${settings.channelId ? `<#${settings.channelId}>` : "Not configured"}`,
+      content: `Verification settings saved.\nRole: ${settings.roleId ? `<@&${settings.roleId}>` : "Not configured"}\nVerification channel: ${settings.channelId ? `<#${settings.channelId}>` : "Not configured"}`,
       ephemeral: true
     });
   }
