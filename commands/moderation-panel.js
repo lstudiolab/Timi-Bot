@@ -183,7 +183,7 @@ function buildPanel(guild, settings) {
     .addSectionComponents(
       section(
         "Advanced spam thresholds",
-        `Mentions/message: ${settings.maxMentionsPerMessage}; links/message: ${settings.maxLinksPerMessage}; links/window: ${settings.maxLinksPerWindow}; duplicate window: ${settings.duplicateWindowSeconds}s; similarity: ${settings.similarityThreshold}`,
+        `Mentions/message: ${settings.maxMentionsPerMessage}; links/message: ${settings.maxLinksPerMessage}; links/window: ${settings.maxLinksPerWindow}; duplicate window: ${settings.duplicateWindowSeconds}s; similarity: ${settings.similarityThreshold}; exemptions: ${(settings.exemptRoleIds || []).length} roles / ${(settings.exemptChannelIds || []).length} channels`,
         editButton("modpanel:advanced", "Edit")
       )
     );
@@ -442,5 +442,6 @@ module.exports = {
   },
   handleInteraction,
   getSettings,
-  saveSettings
+  saveSettings,
+  refreshPanel
 };
