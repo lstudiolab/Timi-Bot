@@ -1,22 +1,7 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, SlashCommandBuilder } = require("discord.js");
 const verification = require("../verification-system");
-const initialized = new WeakSet();
-
 function initialize(client) {
   verification.startWebServer(client);
-  if (initialized.has(client)) return;
-  initialized.add(client);
-  client.on("interactionCreate", async interaction => {
-    if (!interaction.customId?.startsWith("verify:")) return;
-    try {
-      await verification.handleInteraction(interaction, client);
-    } catch (error) {
-      console.error("Verification interaction failed:", error.message);
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({ content: "Timi could not complete verification. Please try again later.", ephemeral: true }).catch(() => {});
-      }
-    }
-  });
 }
 
 module.exports = {
