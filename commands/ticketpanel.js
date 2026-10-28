@@ -425,15 +425,9 @@ async function handleInteraction(interaction, client) {
       return true;
     }
     saveSettings(interaction.guildId, settings);
-    await interaction.update({
-      ...buildConfigPanel(settings),
-      content: "Ticket settings saved. Updating published panels..."
-    });
+    await interaction.reply({ content: "Ticket settings saved. Updating published panels...", ephemeral: true });
     await refreshPublishedPanels(interaction.guild, settings);
-    await interaction.editReply({
-      ...buildConfigPanel(settings),
-      content: "Ticket settings saved. Published panels have been updated."
-    });
+    await interaction.editReply({ content: "Ticket settings saved. Published panels have been updated." });
     return true;
   }
 
@@ -456,8 +450,8 @@ async function handleInteraction(interaction, client) {
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("ticketconfig")
-    .setDescription("Customize and publish the ticket panel.")
+    .setName("ticketpanel")
+    .setDescription("Create and publish a ticket panel, then customize it.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   async execute(interaction) {
     if (!interaction.inGuild()) {
