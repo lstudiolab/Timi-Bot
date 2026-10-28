@@ -1,27 +1,12 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder } = require("discord.js");
-const panelCommand = require("./verifypanel");
+const { SlashCommandBuilder } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("verifycode")
-    .setDescription("Open the modal to enter your email verification code."),
-  async execute(interaction, client) {
-    if (!interaction.inGuild()) {
-      await interaction.reply({ content: "This command can only be used in a server.", ephemeral: true });
-      return;
-    }
-    panelCommand.initialize(client);
-    const verification = require("../verification-system");
-    const settings = verification.getSettings(interaction.guildId);
-    if (settings.channelId && interaction.channelId !== settings.channelId) {
-      await interaction.reply({ content: `Use /verifycode in <#${settings.channelId}> so the verification prompts stay in the configured channel.`, ephemeral: true });
-      return;
-    }
+    .setDescription("Get instructions for completing website email verification."),
+  async execute(interaction) {
     await interaction.reply({
-      content: "If you have requested a code on the Timi verification website, use the button below to enter it.",
-      components: [new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("verify:code-open").setLabel("Enter verification code").setStyle(ButtonStyle.Primary)
-      )],
+      content: "Verification codes are now entered on the Timi website. Open the private link sent when you clicked Verify in the server panel, enter the six-digit code from your email, and Timi will assign the configured role automatically. You do not need to claim a username or enter the code in Discord.",
       ephemeral: true
     });
   }
