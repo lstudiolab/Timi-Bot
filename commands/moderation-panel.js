@@ -27,6 +27,13 @@ const DEFAULT_SETTINGS = Object.freeze({
   logChannelId: null,
   actionDurationSeconds: 3,
   maxMessageCount: 3,
+  maxMentionsPerMessage: 5,
+  maxLinksPerMessage: 4,
+  maxLinksPerWindow: 5,
+  duplicateWindowSeconds: 20,
+  similarityThreshold: 0.88,
+  exemptRoleIds: [],
+  exemptChannelIds: [],
   panelChannelId: null,
   panelMessageId: null
 });
@@ -172,6 +179,13 @@ function buildPanel(guild, settings) {
         String(settings.maxMessageCount),
         editButton("modpanel:max-count", "Edit")
       )
+    )
+    .addSectionComponents(
+      section(
+        "Advanced spam thresholds",
+        `Mentions/message: ${settings.maxMentionsPerMessage}; links/message: ${settings.maxLinksPerMessage}; links/window: ${settings.maxLinksPerWindow}; duplicate window: ${settings.duplicateWindowSeconds}s; similarity: ${settings.similarityThreshold}`,
+        editButton("modpanel:advanced", "Edit")
+      )
     );
 
   return [container];
@@ -278,6 +292,21 @@ async function handleInteraction(interaction) {
       return;
     }
 
+    if (id === "modpanel:advanced") {
+      const modal = new ModalBuilder()
+        .setCustomId("modpanel:advanced-modal")
+        .setTitle("Edit spam thresholds")
+        .addComponents(
+          new ActionRowBuilder().addComponents(makeTextInput("mentions", "Mentions per message (1-25)", settings.maxMentionsPerMessage, "1 to 25", 2)),
+          new ActionRowBuilder().addComponents(makeTextInput("links-message", "Links per message (1-20)", settings.maxLinksPerMessage, "1 to 20", 2)),
+          new ActionRowBuilder().addComponents(makeTextInput("links-window", "Links per window (2-100)", settings.maxLinksPerWindow, "2 to 100", 3)),
+          new ActionRowBuilder().addComponents(makeTextInput("duplicate-window", "Duplicate window seconds (5-120)", settings.duplicateWindowSeconds, "5 to 120", 3)),
+          new ActionRowBuilder().addComponents(makeTextInput("similarity", "Similarity threshold (0.50-1.00)", Number(settings.similarityThreshold).toFixed(2), "0.50 to 1.00", 4))
+        );
+      await interaction.showModal(modal);
+      return;
+    }
+
     if (id === "modpanel:duration" || id === "modpanel:max-count") {
       const isDuration = id === "modpanel:duration";
       const modal = new ModalBuilder()
@@ -353,6 +382,25 @@ async function handleInteraction(interaction) {
         return;
       }
       settings.maxMessageCount = value;
+    } else if (id === "modpanel:advanced-modal") {
+      const mentions = Number(interaction.fields.getTextInputValue("mentions").trim());
+      const linksMessage = Number(interaction.fields.getTextInputValue("links-message").trim());
+      const linksWindow = Number(interaction.fields.getTextInputValue("links-window").trim());
+      const duplicateWindow = Number(interaction.fields.getTextInputValue("duplicate-window").trim());
+      const similarityValue = Number(interaction.fields.getTextInputValue("similarity").trim());
+      if (!Number.isInteger(mentions) || mentions < 1 || mentions > 25 ||
+          !Number.isInteger(linksMessage) || linksMessage < 1 || linksMessage > 20 ||
+          !Number.isInteger(linksWindow) || linksWindow < 2 || linksWindow > 100 ||
+          !Number.isInteger(duplicateWindow) || duplicateWindow < 5 || duplicateWindow > 120 ||
+          !Number.isFinite(similarityValue) || similarityValue < 0.5 || similarityValue > 1) {
+        await interaction.reply({ content: "Invalid thresholds. Check each value's displayed range; no changes were saved.", ephemeral: true });
+        return;
+      }
+      settings.maxMentionsPerMessage = mentions;
+      settings.maxLinksPerMessage = linksMessage;
+      settings.maxLinksPerWindow = linksWindow;
+      settings.duplicateWindowSeconds = duplicateWindow;
+      settings.similarityThreshold = similarityValue;
     } else {
       return;
     }
