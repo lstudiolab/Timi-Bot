@@ -300,12 +300,6 @@ async function handleInteraction(interaction, client) {
     }
     const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("verify:username-open").setLabel("Claim username").setStyle(ButtonStyle.Primary));
     await interaction.reply({ content: `Email verified and <@&${role.id}> granted. Your generated username is **${session.username}**. Use the button below to claim it.`, components: [row], ephemeral: true });
-    if (settings.channelId) {
-      const channel = await guild.channels.fetch(settings.channelId).catch(() => null);
-      if (channel?.isTextBased() && channel.isSendable()) {
-        await channel.send({ content: `<@${interaction.user.id}>, your verification is complete. Use the private Claim username button in your verification response to claim **${session.username}**.`, allowedMentions: { users: [interaction.user.id] } }).catch(() => {});
-      }
-    }
     return true;
   }
   if (interaction.customId === "verify:username-open") {
