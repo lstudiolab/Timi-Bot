@@ -5,6 +5,7 @@ const welcome = require("./welcomeconfig");
 const security = require("../security-settings");
 const leveling = require("../leveling");
 const economy = require("../economy");
+const logs = require("../log-settings");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -17,7 +18,8 @@ module.exports = {
       { name: "Security / anti-nuke", value: "security" },
       { name: "Welcome messages", value: "welcome" },
       { name: "Leveling", value: "leveling" },
-      { name: "Economy", value: "economy" }
+      { name: "Economy", value: "economy" },
+      { name: "Event logging", value: "logs" }
     )),
   async execute(interaction) {
     if (!interaction.inGuild() || !interaction.guild) {
@@ -52,6 +54,9 @@ module.exports = {
         break;
       case "economy":
         economy.resetSettings(interaction.guildId);
+        break;
+      case "logs":
+        logs.resetSettings(interaction.guildId);
         break;
       default:
         await interaction.reply({ content: "Unknown configuration section.", ephemeral: true });
