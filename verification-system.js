@@ -72,10 +72,29 @@ function clientIp(req) {
   }
   return req.socket.remoteAddress || "unknown";
 }
-function json(res, status, body) {
+function json(res, status, body, extraHeaders = {}) {
   const data = JSON.stringify(body);
-  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Content-Length": Buffer.byteLength(data), "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Content-Length": Buffer.byteLength(data), "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...extraHeaders });
   res.end(data);
+}
+function allowedFrontendOrigin() {
+  return (process.env.FRONTEND_ORIGIN || "").trim().replace(/\\/$/, "");
+}
+function apiHeaders(req) {
+  const origin = req.headers.origin;
+  const allowed = allowedFrontendOrigin();
+  const headers = { "Vary": "Origin", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Accept", "Access-Control-Max-Age": "600" };
+  if (origin && allowed && origin === allowed) headers["Access-Control-Allow-Origin"] = allowed;
+  return headers;
+}
+function apiJson(req, res, status, body) {
+  return json(res, status, body, apiHeaders(req));
+}
+function apiError(req, res, status, token, message) {
+  if (req.headers.accept?.includes("application/json") || req.headers["content-type"]?.includes("application/json")) {
+    return apiJson(req, res, status, { ok: false, message });
+  }
+  return html(res, status, page(token, message));
 }
 function html(res, status, body) {
   res.writeHead(status, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'" });
@@ -145,6 +164,18 @@ function startWebServer(client) {
     try {
       const url = new URL(req.url, "http://localhost");
       if (req.method === "GET" && url.pathname === "/health") return json(res, 200, { ok: true, service: "timi-verification" });
+      if (url.pathname === "/api/request-code" && req.method === "OPTIONS") {
+        const origin = req.headers.origin;
+        const allowed = allowedFrontendOrigin();
+        if (!origin || !allowed || origin !== allowed) return json(res, 403, { error: "Origin not allowed" });
+        res.writeHead(204, apiHeaders(req));
+        return res.end();
+      }
+      if (url.pathname === "/api/request-code" && req.method === "POST") {
+        const origin = req.headers.origin;
+        const allowed = allowedFrontendOrigin();
+        if (origin && (!allowed || origin !== allowed)) return json(res, 403, { ok: false, message: "This website is not allowed to use the verification API." });
+      }
       if (req.method === "GET" && url.pathname === "/style.css") {
         const asset = fs.readFileSync(path.join(__dirname, "public", "style.css"));
         res.writeHead(200, { "Content-Type": "text/css; charset=utf-8", "Content-Length": asset.length, "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff" });
@@ -168,23 +199,33 @@ function startWebServer(client) {
           raw += chunk;
           if (raw.length > 8192) { res.writeHead(413); return res.end(); }
         }
-        const params = new URLSearchParams(raw);
-        const token = params.get("session") || "";
-        const email = (params.get("email") || "").trim().toLowerCase();
+        let token = "";
+        let email = "";
+        if ((req.headers["content-type"] || "").includes("application/json")) {
+          let payload;
+          try { payload = JSON.parse(raw); } catch { return apiJson(req, res, 400, { ok: false, message: "Invalid request body." }); }
+          token = typeof payload.session === "string" ? payload.session : "";
+          email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
+        } else {
+          const params = new URLSearchParams(raw);
+          token = params.get("session") || "";
+          email = (params.get("email") || "").trim().toLowerCase();
+        }
+        const wantsJson = req.headers.accept?.includes("application/json") || (req.headers["content-type"] || "").includes("application/json");
         const session = sessions.get(token);
-        if (!session || session.expiresAt < Date.now() || session.used) return html(res, 400, page("", "This verification link is invalid or expired. Return to Discord and click Verify again."));
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return html(res, 400, page(token, "Enter a valid email address."));
+        if (!session || session.expiresAt < Date.now() || session.used) return apiError(req, res, 400, "", "This verification link is invalid or expired. Return to Discord and click Verify again.");
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return apiError(req, res, 400, token, "Enter a valid email address.");
         const ip = clientIp(req);
         const assessment = assessIp(ip, session, email, req.headers["user-agent"] || "");
         if (assessment.blocked) {
           await sendSecurityAlert(client, session.guildId, `Verification security: network hash ${assessment.ipHash.slice(0, 12)} blocked for 7 days after ${assessment.count} requests in 24 hours.`);
-          return html(res, 429, page(token, "Too many verification attempts from this network. Access is temporarily blocked for 7 days."));
+          return apiError(req, res, 429, token, "Too many verification attempts from this network. Access is temporarily blocked for 7 days.");
         }
         if (assessment.risk.score >= 3) {
           await sendSecurityAlert(client, session.guildId, `Verification anomaly: score ${assessment.risk.score}; signals: ${assessment.risk.signals.map(s => s.key).join(", ")}. Session user: <@${session.userId}>. System action: flagged for review; no role was granted.`);
         }
         if (emailSendCooldowns.has(email) && Date.now() - emailSendCooldowns.get(email) < 60_000) {
-          return html(res, 429, page(token, "Wait 60 seconds before requesting another code for this email."));
+          return apiError(req, res, 429, token, "Wait 60 seconds before requesting another code for this email.");
         }
         const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
         session.email = email;
@@ -205,8 +246,9 @@ function startWebServer(client) {
           });
         } catch (error) {
           console.error("Verification email delivery failed:", error.message);
-          return html(res, 503, page(token, "Email could not be sent. Try again later or contact the server owner."));
+          return apiError(req, res, 503, token, "Email could not be sent. Try again later or contact the server owner.");
         }
+        if (wantsJson) return apiJson(req, res, 200, { ok: true, message: "If the address can receive mail, a one-time code has been sent. Return to Discord and use /verifycode." });
         return html(res, 200, `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Code sent</title><body style="font:16px -apple-system,sans-serif;background:#f5f5f7;display:grid;place-items:center;min-height:100vh;padding:20px"><main style="background:white;border:1px solid #ddd;border-radius:24px;padding:30px;max-width:420px"><h1>Check your email</h1><p>A one-time code has been sent if the address can receive mail.</p><p>Return to Discord and run <b>/verifycode</b>, then enter the code in the modal. The code expires in 10 minutes.</p></main></body>`);
       }
       html(res, 404, "<!doctype html><title>Not found</title><h1>Not found</h1>");
