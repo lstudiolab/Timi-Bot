@@ -170,37 +170,31 @@ async function handleInteraction(interaction, client) {
       return true;
     }
 
-    const baseline = {
-      ViewChannel: true,
-      SendMessages: true,
-      ReadMessageHistory: true,
-      EmbedLinks: true,
-      AttachFiles: true,
-      UseApplicationCommands: true,
-      Connect: true,
-      Speak: true
-    };
-
+    // Approval removes Timi's temporary per-channel restrictions. Never grant
+    // broad explicit permissions: that would expose private channels and tickets.
     for (const target of guild.channels.cache.values()) {
       if (!target.permissionOverwrites) continue;
-      if (target.name === "timi" || target.name === "timi-confirmations" || target.name === "timi-logs") {
-        await target.permissionOverwrites.edit(botId, {
-          ViewChannel: false,
-          SendMessages: false,
-          ReadMessageHistory: false
-        }, { reason: "Keep approved bots out of Timi private channels" }).catch(() => {});
-        continue;
+      try {
+        if (target.name === "timi" || target.name === "timi-confirmations" || target.name === "timi-logs") {
+          await target.permissionOverwrites.edit(botId, {
+            ViewChannel: false,
+            SendMessages: false,
+            ReadMessageHistory: false
+          }, { reason: "Keep approved bots out of Timi private channels" });
+        } else {
+          await target.permissionOverwrites.delete(
+            botId,
+            "Remove temporary bot-approval restriction and inherit server permissions"
+          );
+        }
+      } catch (error) {
+        console.error(`Could not restore default permissions for bot in channel ${target.id}:`, error.message);
       }
-      await target.permissionOverwrites.edit(botId, baseline, {
-        reason: `Bot approved by ${interaction.user.tag} through Timi bot protection`
-      }).catch(error => {
-        console.error(`Could not grant approved bot access in channel ${target.id}:`, error.message);
-      });
     }
 
     pending.delete(key);
     await interaction.update({
-      embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x808080).setTitle("Bot approved").setDescription("The bot was approved. Timi granted a standard set of channel permissions.")],
+      embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x808080).setTitle("Bot approved").setDescription("The bot was approved. Timi removed its temporary restrictions; normal server and channel permissions now apply.")],
       components: []
     });
     return true;
