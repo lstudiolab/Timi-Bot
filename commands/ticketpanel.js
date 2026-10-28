@@ -53,7 +53,50 @@ function getSettings(guildId) {
 
 function saveSettings(guildId, settings) {
   const store = readStore();
-  store[guildId] = { ...DEFAULTS, ...settings };
+  const previous = store[guildId] || {};
+  store[guildId] = {
+    ...DEFAULTS,
+    ...previous,
+    ...settings,
+    publishedPanels: previous.publishedPanels || []
+  };
+  writeStore(store);
+}
+
+async function refreshPublishedPanels(guild, settings) {
+  const stored = readStore()[guild.id];
+  const panels = Array.isArray(stored?.publishedPanels) ? stored.publishedPanels : [];
+  const remaining = [];
+
+  for (const panel of panels) {
+    try {
+      const channel = await guild.channels.fetch(panel.channelId);
+      if (!channel || !channel.isTextBased()) continue;
+      const message = await channel.messages.fetch(panel.messageId);
+      await message.edit(buildPublicPanel(settings));
+      remaining.push(panel);
+    } catch (error) {
+      // Keep transient failures so the panel can be refreshed on a later edit.
+      if (error.code !== 10008 && error.code !== 10003 && error.code !== 50001) {
+        remaining.push(panel);
+      }
+    }
+  }
+
+  const store = readStore();
+  store[guild.id] = { ...getSettings(guild.id), publishedPanels: remaining };
+  writeStore(store);
+}
+
+function rememberPublishedPanel(guildId, channelId, messageId) {
+  const store = readStore();
+  const settings = { ...DEFAULTS, ...(store[guildId] || {}) };
+  const panels = Array.isArray(settings.publishedPanels) ? settings.publishedPanels : [];
+  settings.publishedPanels = [
+    ...panels.filter(panel => panel.channelId !== channelId || panel.messageId !== messageId),
+    { channelId, messageId }
+  ];
+  store[guildId] = settings;
   writeStore(store);
 }
 
@@ -335,7 +378,12 @@ async function handleInteraction(interaction, client) {
     saveSettings(interaction.guildId, settings);
     await interaction.reply({
       ...buildConfigPanel(settings),
-      content: "Ticket settings saved."
+      content: "Ticket settings saved. Updating published panels..."
+    });
+    await refreshPublishedPanels(interaction.guild, settings);
+    await interaction.editReply({
+      ...buildConfigPanel(settings),
+      content: "Ticket settings saved. Published panels have been updated."
     });
     return true;
   }
@@ -345,8 +393,9 @@ async function handleInteraction(interaction, client) {
       await interaction.reply({ content: "You need Manage Server permission to publish a ticket panel.", ephemeral: true });
       return true;
     }
-    await interaction.channel.send(buildPublicPanel(getSettings(interaction.guildId)));
-    await interaction.reply({ content: "Ticket panel published in this channel.", ephemeral: true });
+    const message = await interaction.channel.send(buildPublicPanel(getSettings(interaction.guildId)));
+    rememberPublishedPanel(interaction.guildId, interaction.channelId, message.id);
+    await interaction.reply({ content: "Ticket panel published in this channel. You can edit it anytime with /ticketpanel; saved changes will update this panel.", ephemeral: true });
     return true;
   }
 
