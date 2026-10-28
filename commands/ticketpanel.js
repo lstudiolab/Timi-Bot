@@ -24,6 +24,7 @@ const DEFAULTS = Object.freeze({
   ticketMessage: "Please describe what you need help with. A member of the support team will be with you shortly.",
   closeButtonLabel: "Close Ticket",
   categoryName: "ticket",
+  panelColor: "808080",
   supportRoleIds: [],
   transcriptChannelId: null,
   closeDelaySeconds: 5
@@ -132,41 +133,14 @@ function makeInput(id, label, value, style = TextInputStyle.Short, maxLength = 1
   return input;
 }
 
-async function refreshConfigPanel(guild, settings) {
-  const panel = settings.configPanel;
-  if (!panel?.channelId || !panel?.messageId) return false;
-  try {
-    const channel = guild.channels.cache.get(panel.channelId) || await guild.channels.fetch(panel.channelId);
-    if (!channel?.isTextBased()) return false;
-    const message = await channel.messages.fetch(panel.messageId);
-    await message.edit(buildConfigPanel(settings));
-    return true;
-  } catch (error) {
-    console.error("Could not refresh ticket configuration panel:", error.message);
-    return false;
-  }
-}
-
 async function openOrUpdateConfig(interaction) {
   const settings = getSettings(interaction.guildId);
-  const panel = settings.configPanel;
-  if (panel?.channelId && panel?.messageId) {
-    const channel = interaction.guild.channels.cache.get(panel.channelId) || await interaction.guild.channels.fetch(panel.channelId).catch(() => null);
-    const existing = channel?.isTextBased() ? await channel.messages.fetch(panel.messageId).catch(() => null) : null;
-    if (existing) {
-      await existing.edit(buildConfigPanel(settings));
-      await interaction.reply({ content: "Updated the existing ticket configuration panel.", ephemeral: true });
-      return;
-    }
-  }
-  await interaction.reply(buildConfigPanel(settings));
-  const message = await interaction.fetchReply();
-  settings.configPanel = { channelId: message.channelId, messageId: message.id };
-  saveSettings(interaction.guildId, settings);
+  await interaction.reply({ ...buildConfigPanel(settings), ephemeral: true });
 }
+
 function buildConfigPanel(settings) {
   const embed = new EmbedBuilder()
-    .setColor(0x808080)
+    .setColor(parseInt(settings.panelColor || "808080", 16))
     .setTitle("Ticket Panel Configuration")
     .setDescription(
       `**Panel title:** ${settings.panelTitle}\n**Panel description:** ${settings.panelDescription}\n**Open button:** ${settings.openButtonLabel}\n**Ticket message:** ${settings.ticketMessage}\n**Close button:** ${settings.closeButtonLabel}\n**Category:** ${settings.categoryName}\n**Support roles:** ${(settings.supportRoleIds || []).map(roleId => `<@&${roleId}>`).join(", ") || "Server managers only"}\n**Transcript channel:** ${settings.transcriptChannelId ? `<#${settings.transcriptChannelId}>` : "Not configured"}\n**Close delay:** ${settings.closeDelaySeconds ?? 5} seconds\n\nEdit each part, then use Publish Panel to post the public ticket panel in this channel.`
@@ -498,7 +472,7 @@ async function handleInteraction(interaction, client) {
     const settings = getSettings(interaction.guildId);
     settings.supportRoleIds = interaction.values.slice(0, 10);
     saveSettings(interaction.guildId, settings);
-    await interaction.update(buildConfigPanel(settings));
+    await interaction.update({ ...buildConfigPanel(settings), content: "Support roles saved." });
     return true;
   }
 
@@ -510,7 +484,7 @@ async function handleInteraction(interaction, client) {
     const settings = getSettings(interaction.guildId);
     settings.transcriptChannelId = interaction.values[0] || null;
     saveSettings(interaction.guildId, settings);
-    await interaction.update(buildConfigPanel(settings));
+    await interaction.update({ ...buildConfigPanel(settings), content: "Transcript destination saved." });
     return true;
   }
   if (interaction.isModalSubmit()) {
@@ -549,7 +523,6 @@ async function handleInteraction(interaction, client) {
       ...buildConfigPanel(settings),
       content: "Ticket settings saved. Updating published panels..."
     });
-    await refreshConfigPanel(interaction.guild, settings);
     await refreshPublishedPanels(interaction.guild, settings);
     await interaction.editReply({
       ...buildConfigPanel(settings),
