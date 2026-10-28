@@ -17,6 +17,7 @@ test("security settings merge defaults and persist per server", () => {
   assert.equal(saved.joinThreshold, 9);
   assert.equal(saved.antiNukeEnabled, true);
   assert.equal(securitySettings.getSettings(guildId).joinThreshold, 9);
+  assert.equal(securitySettings.resetSettings(guildId).joinThreshold, 6);
 });
 
 test("warning history is isolated by guild/member and can be cleared", () => {
@@ -44,6 +45,8 @@ test("economy rejects self-payments and insufficient funds, then transfers coins
   assert.equal(economy.collect(guildId, sender, "daily").amount, 10);
   assert.equal(economy.pay(guildId, sender, receiver, 4).balance, 6);
   assert.equal(economy.getBalance(guildId, receiver), 4);
+  assert.equal(economy.resetSettings(guildId).dailyMin, 100);
+  assert.equal(economy.getBalance(guildId, receiver), 4);
 });
 
 test("leveling awards configured XP and applies the cooldown", async () => {
@@ -58,5 +61,7 @@ test("leveling awards configured XP and applies the cooldown", async () => {
   await leveling.handleMessage(message);
   assert.equal(leveling.getRank(guildId, userId).xp, 12);
   await leveling.handleMessage(message);
+  assert.equal(leveling.getRank(guildId, userId).xp, 12);
+  assert.equal(leveling.resetSettings(guildId).enabled, false);
   assert.equal(leveling.getRank(guildId, userId).xp, 12);
 });
