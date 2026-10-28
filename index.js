@@ -14,6 +14,7 @@ const {
 const botProtection = require("./bot-protection");
 const ticketPanel = require("./commands/ticketpanel");
 const recoveryBackup = require("./recovery-backup");
+const securitySettings = require("./security-settings");
 
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.CLIENT_ID;
@@ -212,8 +213,9 @@ const NEW_ACCOUNT_TIMEOUT_MS = 10 * 60 * 1000;
 async function monitorNewAccount(member) {
   if (member.user.bot) return;
 
+  const settings = securitySettings.getSettings(member.guild.id);
   const accountAgeMs = Date.now() - member.user.createdTimestamp;
-  if (accountAgeMs >= NEW_ACCOUNT_ALERT_AGE_MS) return;
+  if (accountAgeMs >= settings.newAccountAlertDays * 24 * 60 * 60 * 1000) return;
 
   const ageHours = Math.max(0, Math.floor(accountAgeMs / (60 * 60 * 1000)));
   const ageText = ageHours < 24
@@ -223,16 +225,16 @@ async function monitorNewAccount(member) {
 
   // Very recently created accounts are temporarily timed out to reduce the
   // chance of immediate spam or coordinated disruption. This is not a ban.
-  if (accountAgeMs < VERY_NEW_ACCOUNT_AGE_MS) {
+  if (settings.timeoutNewAccounts && accountAgeMs < settings.veryNewAccountDays * 24 * 60 * 60 * 1000) {
     const botMember = member.guild.members.me;
     if (botMember?.permissions.has(PermissionFlagsBits.ModerateMembers) &&
         member.moderatable) {
       try {
         await member.timeout(
-          NEW_ACCOUNT_TIMEOUT_MS,
+          settings.newAccountTimeoutMinutes * 60 * 1000,
           "Timi security: newly created account; temporary review timeout"
         );
-        action = "temporarily timed out for 10 minutes";
+        action = "temporarily timed out for " + settings.newAccountTimeoutMinutes + " minutes";
       } catch (error) {
         console.error("Could not apply new-account timeout:", error.message);
       }
@@ -255,12 +257,15 @@ async function monitorNewAccount(member) {
 async function monitorJoinBurst(member) {
   if (member.user.bot) return;
   const guildId = member.guild.id;
+  const settings = securitySettings.getSettings(guildId);
+  if (!settings.joinBurstEnabled) return;
+  const windowMs = settings.joinWindowSeconds * 1000;
   const now = Date.now();
-  const joins = (joinBursts.get(guildId) || []).filter(timestamp => now - timestamp <= RAID_JOIN_WINDOW_MS);
+  const joins = (joinBursts.get(guildId) || []).filter(timestamp => now - timestamp <= windowMs);
   joins.push(now);
   joinBursts.set(guildId, joins);
 
-  if (joins.length < RAID_JOIN_THRESHOLD) return;
+  if (joins.length < settings.joinThreshold) return;
   const lastAlert = raidAlertTimes.get(guildId) || 0;
   if (now - lastAlert < RAID_ALERT_COOLDOWN_MS) return;
   raidAlertTimes.set(guildId, now);
@@ -271,7 +276,7 @@ async function monitorJoinBurst(member) {
   if (!channel?.isTextBased() || !channel.isSendable()) return;
 
   await channel.send({
-    content: `Security alert: ${joins.length} human members joined within ${RAID_JOIN_WINDOW_MS / 1000} seconds. This may indicate a raid. Timi has not automatically punished anyone; review the server's verification and invite settings.`,
+    content: `Security alert: ${joins.length} human members joined within ${settings.joinWindowSeconds} seconds. This may indicate a raid. Timi has not automatically punished anyone; review the server's verification and invite settings.`,
     allowedMentions: { parse: [] }
   }).catch(error => console.error("Could not send raid alert:", error.message));
 }
@@ -296,6 +301,7 @@ const CHANNEL_DELETE_TIMEOUT_MS = 60 * 60 * 1000;
 async function handleChannelDeletion(channel) {
   if (!channel.guild) return;
   const guild = channel.guild;
+  const security = securitySettings.getSettings(guild.id);
 
   const botMember = guild.members.me;
   if (!botMember?.permissions.has(PermissionFlagsBits.ViewAuditLog)) {
@@ -327,7 +333,7 @@ async function handleChannelDeletion(channel) {
   const now = Date.now();
   const key = `${guild.id}:${actor.id}`;
   const history = (channelDeletionHistory.get(key) || [])
-    .filter(item => now - item.time <= CHANNEL_DELETE_WINDOW_MS);
+    .filter(item => now - item.time <= security.channelDeleteWindowSeconds * 1000);
   history.push({ time: now, channelId: channel.id, channelName: channel.name });
   channelDeletionHistory.set(key, history);
 
@@ -336,12 +342,12 @@ async function handleChannelDeletion(channel) {
   );
   if (logChannel?.isTextBased() && logChannel.isSendable()) {
     await logChannel.send({
-      content: `Security alert: <@${actor.id}> deleted channel ${channel.name} (${channel.id}). Count: ${history.length} in 60 seconds.`,
+      content: `Security alert: <@${actor.id}> deleted channel ${channel.name} (${channel.id}). Count: ${history.length} in ${security.channelDeleteWindowSeconds} seconds.`,
       allowedMentions: { parse: [] }
     }).catch(() => {});
   }
 
-  if (history.length < CHANNEL_DELETE_THRESHOLD) return;
+  if (!security.antiNukeEnabled || history.length < security.channelDeleteThreshold) return;
 
   // Once a deletion burst is confirmed, recreate channels and replay archived messages.
   await recoveryBackup.restoreRecentDeletedChannels(
@@ -367,13 +373,13 @@ async function handleChannelDeletion(channel) {
 
   try {
     await actor.timeout(
-      CHANNEL_DELETE_TIMEOUT_MS,
-      `Timi anti-nuke: deleted ${history.length} channels within 60 seconds`
+      security.antiNukeTimeoutMinutes * 60 * 1000,
+      `Timi anti-nuke: deleted ${history.length} channels within ${security.channelDeleteWindowSeconds} seconds`
     );
 
     if (logChannel?.isTextBased() && logChannel.isSendable()) {
       await logChannel.send({
-        content: `Anti-nuke action: <@${actor.id}> was timed out for 60 minutes after deleting ${history.length} channels in 60 seconds. No roles were changed automatically; review the audit log before taking further action.`,
+        content: `Anti-nuke action: <@${actor.id}> was timed out for ${security.antiNukeTimeoutMinutes} minutes after deleting ${history.length} channels in ${security.channelDeleteWindowSeconds} seconds. No roles were changed automatically; review the audit log before taking further action.`,
         allowedMentions: { parse: [] }
       }).catch(() => {});
     }
