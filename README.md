@@ -7,6 +7,8 @@ A JavaScript Discord bot with a moderation configuration panel.
 - Node.js 20 or newer
 - A Discord application and bot token
 - The bot invited to your server with the `bot` and `applications.commands` scopes
+- The **Message Content Intent** enabled under Developer Portal → Bot → Privileged Gateway Intents
+- Bot permissions: View Channels, Read Message History, Manage Messages, Moderate Members; add Kick Members or Ban Members only if those sanctions are selected
 
 ## Setup
 
@@ -40,7 +42,11 @@ The panel contains the controls shown in the reference:
 
 Settings are saved per server in `data/moderation-settings.json` on the machine running Timi. The channel named `announcements` is selected as the initial log channel when it exists.
 
-**Scope:** this commit implements the configuration panel and persistent settings only. It does not yet enforce a spam-detection or moderation system, or send moderation log events.
+## Anti-spam enforcement
+
+The moderation module now checks rapid message bursts, repeated or near-identical text, excessive mentions, and rapid link posting. Detection state is tracked per server and member in memory. When a trigger is detected, Timi attempts to delete recent spam messages and applies the configured timeout, kick, or ban when it has the required Discord permissions. If a sanction cannot be applied, it logs the failure to the console. Configure a log channel to receive moderation action reports.
+
+Moderators with Manage Messages or Administrator are exempt. Timi itself is ignored, but other bot accounts are evaluated too. The detector is heuristic: test it in a private server first, because thresholds can produce false positives. Runtime detection history resets when Timi restarts; server settings remain stored in `data/moderation-settings.json` on the host.
 
 ## Security
 
