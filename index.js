@@ -103,8 +103,8 @@ function normalizeContent(content) {
     .toLowerCase()
     .replace(/https?:\/\/\S+/g, "<url>")
     .replace(/<@!?\d+>|<@&\d+>|<#\d+>/g, "<mention>")
-    .replace(/\\s+/g, " ")
-    .replace(/[\\p{P}\\p{S}]/gu, "")
+    .replace(/\s+/g, " ")
+    .replace(/[\p{P}\p{S}]/gu, "")
     .trim();
 }
 
