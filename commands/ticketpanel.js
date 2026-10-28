@@ -264,11 +264,12 @@ async function openTicket(interaction, client) {
     // and explicitly grant access only to roles that have ManageGuild.
     // Do not create a deny overwrite for every role: it both wastes Discord's
     // 100-overwrite limit and blocks legitimate moderators from seeing tickets.
+    const supportRoleIds = new Set(settings.supportRoleIds || []);
     const managerRoles = [...guild.roles.cache.values()]
       .filter(role =>
         role.id !== guild.roles.everyone.id &&
         !role.managed &&
-        role.permissions.has(PermissionFlagsBits.ManageGuild)
+        (role.permissions.has(PermissionFlagsBits.ManageGuild) || supportRoleIds.has(role.id))
       )
       .slice(0, 95)
       .map(role => ({
@@ -444,6 +445,29 @@ async function handleInteraction(interaction, client) {
     return true;
   }
 
+  if (interaction.isRoleSelectMenu() && id === "ticket:support-roles") {
+    if (!isManager(interaction)) {
+      await interaction.reply({ content: "You need Manage Server permission to configure tickets.", ephemeral: true });
+      return true;
+    }
+    const settings = getSettings(interaction.guildId);
+    settings.supportRoleIds = interaction.values.slice(0, 10);
+    saveSettings(interaction.guildId, settings);
+    await interaction.update(buildConfigPanel(settings));
+    return true;
+  }
+
+  if (interaction.isChannelSelectMenu() && id === "ticket:transcript-channel") {
+    if (!isManager(interaction)) {
+      await interaction.reply({ content: "You need Manage Server permission to configure tickets.", ephemeral: true });
+      return true;
+    }
+    const settings = getSettings(interaction.guildId);
+    settings.transcriptChannelId = interaction.values[0] || null;
+    saveSettings(interaction.guildId, settings);
+    await interaction.update(buildConfigPanel(settings));
+    return true;
+  }
   if (interaction.isModalSubmit()) {
     if (!isManager(interaction)) {
       await interaction.reply({ content: "You need Manage Server permission to configure tickets.", ephemeral: true });
