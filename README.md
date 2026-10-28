@@ -56,7 +56,7 @@ Anti-spam detection is heuristic, so test thresholds in a private server before 
 
 Security automations use Discord audit logs and permission hierarchy. They cannot override the server owner, Administrator permission, or members above Timi's role.
 
-## Welcome messages
+Use `/configreset` to reset one feature section to default settings. Ticket public panels are refreshed; leveling XP and economy balances are preserved. Warning records are not cleared by configuration resets.\n\n## Welcome messages
 
 Use `/welcomeconfig` to enable or disable welcome messages, select the destination channel, and customize the message. Supported placeholders are `{user}`, `{username}`, `{server}`, and `{memberCount}`. Welcome messages are disabled until configured.
 
