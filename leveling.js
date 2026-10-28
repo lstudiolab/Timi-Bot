@@ -45,6 +45,13 @@ function readXp() {
   if (!xpCache) xpCache = readJson(XP_FILE, {});
   return xpCache;
 }
+function resetSettings(guildId) {
+  const store = readSettings();
+  store[guildId] = { ...DEFAULT_SETTINGS };
+  writeJson(SETTINGS_FILE, store);
+  settingsCache = store;
+  return getSettings(guildId);
+}
 function getRank(guildId, userId) {
   const value = readXp()[guildId]?.[userId] || { xp: 0, lastMessageAt: 0 };
   return { ...value, level: Math.floor(Math.sqrt(Math.max(0, value.xp) / 100)) };
@@ -82,4 +89,4 @@ async function handleMessage(message) {
     }
   }
 }
-module.exports = { DEFAULT_SETTINGS, getSettings, saveSettings, getRank, getLeaderboard, handleMessage };
+module.exports = { DEFAULT_SETTINGS, getSettings, saveSettings, resetSettings, getRank, getLeaderboard, handleMessage };
