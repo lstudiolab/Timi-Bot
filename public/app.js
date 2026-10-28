@@ -11,7 +11,7 @@
 
   // Set TIMI_API_BASE_URL in public/config.js to the public HTTPS tunnel URL for Termux.
   const configuredApi = (window.TIMI_API_BASE_URL || "").trim().replace(/\/$/, "");
-  const apiBase = configuredApi || window.location.origin;
+  const apiBase = configuredApi;
 
   if (sessionInput) sessionInput.value = session;
   const showNotice = (message, isError = true) => {
@@ -34,7 +34,7 @@
       email.reportValidity();
       return;
     }
-    if (window.TIMI_API_BASE_URL === undefined) {
+    if (!apiBase) {
       showNotice("The verification API has not been configured. Contact the server owner.");
       return;
     }
