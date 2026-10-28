@@ -586,6 +586,11 @@ module.exports = {
     }
     await openOrUpdateConfig(interaction);
   },
+  resetSettings(guildId) {
+    saveSettings(guildId, { ...DEFAULTS });
+    return getSettings(guildId);
+  },
+  refreshPublishedPanels,
   async executeConfig(interaction) {
     if (!interaction.inGuild()) {
       await interaction.reply({ content: "This command can only be used in a server.", ephemeral: true });
