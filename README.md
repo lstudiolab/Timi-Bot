@@ -94,7 +94,7 @@ The verification website can be split across two hosts so the Discord bot and it
 2. Set the **Publish Directory** to `public`. No build command is needed.
 3. After creation, copy its exact HTTPS origin, such as `https://your-timi-frontend.onrender.com`.
 4. Edit `public/config.js` in GitHub and set `window.TIMI_API_BASE_URL` to the public HTTPS tunnel URL for the Termux server. Do not include a trailing slash. This file contains no secrets.
-5. Set the Termux environment variables `BASE_URL` and `FRONTEND_ORIGIN) to that exact Render Static Site origin.
+5. Set the Termux environment variables `BASE_URL` and `FRONTEND_ORIGIN` to that exact Render Static Site origin.
 
 ### Configure Termux backend
 
@@ -120,10 +120,10 @@ Keep the bot running in Termux. Start the HTTPS tunnel in a second Termux sessio
 ### Verify the deployment
 
 1. Open `https://YOUR-TERMUX-TUNNEL/health`. It should return JSON containing `"ok":true`.
-2. Confirm the Render Static Site loads `/`, `/style.css`, `/app.js`, and `/config.js).
+2. Confirm the Render Static Site loads `/`, `/style.css`, `/app.js`, and `/config.js`.
 3. In Discord, run `/verificationconfig` and configure the role/channel, then run `/verifypanel`.
 4. Click **Verify**. The link must use the Render Static Site origin and contain a 64-character session token.
-5. Submit an email address. The page should show a generic success message, and the one-time code should arrive by email. Then complete `/verifycode) in Discord.
+5. Submit an email address. The page should show a generic success message, and the one-time code should arrive by email. Then complete `/verifycode` in Discord.
 
 ### Security and operational limits
 
