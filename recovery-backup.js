@@ -226,7 +226,7 @@ async function restoreDeletedChannel(guild, channelId, logChannel) {
           `Author ID: ${item.authorId}`,
           item.content || "(no text content)",
           attachmentText
-        ].join("\\n").slice(0, 1900);
+        ].join("\n").slice(0, 1900);
         await recreated.send({ content: body, allowedMentions: { parse: [] } }).catch(error => {
           console.error("Could not repost archived message:", error.message);
         });
