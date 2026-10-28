@@ -24,6 +24,10 @@ const DEFAULTS = Object.freeze({
 });
 
 let storeCache;
+const ticketCreationLocks = new Set();
+const ticketCreationCooldowns = new Map();
+const TICKET_COOLDOWN_MS = 10_000;
+
 
 function readStore() {
   if (storeCache) return storeCache;
@@ -169,6 +173,22 @@ async function findOrCreateCategory(guild, name, client) {
 
 async function openTicket(interaction, client) {
   const guild = interaction.guild;
+  const userKey = `${guild.id}:${interaction.user.id}`;
+  const now = Date.now();
+  const lastCreated = ticketCreationCooldowns.get(userKey) || 0;
+  if (now - lastCreated < TICKET_COOLDOWN_MS) {
+    await interaction.reply({
+      content: "Please wait a few seconds before opening another ticket.",
+      ephemeral: true
+    });
+    return;
+  }
+  if (ticketCreationLocks.has(userKey)) {
+    await interaction.reply({ content: "Your ticket request is already being processed.", ephemeral: true });
+    return;
+  }
+  ticketCreationLocks.add(userKey);
+
   const settings = getSettings(guild.id);
   const existing = guild.channels.cache.find(channel =>
     channel.type === ChannelType.GuildText &&
@@ -178,6 +198,7 @@ async function openTicket(interaction, client) {
   );
 
   if (existing) {
+    ticketCreationLocks.delete(userKey);
     await interaction.reply({
       content: `You already have an open ticket: <#${existing.id}>`,
       ephemeral: true
@@ -195,6 +216,16 @@ async function openTicket(interaction, client) {
       .replace(/^-|-$/g, "")
       .slice(0, 80) || interaction.user.id;
 
+    const roleDenies = [...guild.roles.cache.values()]
+      .filter(role => role.id !== guild.roles.everyone.id && !role.managed)
+      .map(role => ({
+        id: role.id,
+        deny: [PermissionFlagsBits.ViewChannel]
+      }));
+    if (roleDenies.length + 3 > 100) {
+      throw new Error("Too many roles to safely create a private ticket channel (Discord allows at most 100 permission overwrites).");
+    }
+
     const channel = await guild.channels.create({
       name: `ticket-${safeName}`.slice(0, 100),
       type: ChannelType.GuildText,
@@ -202,6 +233,7 @@ async function openTicket(interaction, client) {
       topic: `timi-ticket-owner:${interaction.user.id}`,
       permissionOverwrites: [
         { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+        ...roleDenies,
         {
           id: interaction.user.id,
           allow: [
@@ -246,10 +278,17 @@ async function openTicket(interaction, client) {
       allowedMentions: { users: [interaction.user.id] }
     });
 
+    ticketCreationCooldowns.set(userKey, Date.now());
     await interaction.editReply(`Your ticket has been created: <#${channel.id}>`);
   } catch (error) {
     console.error("Could not open ticket:", error.message);
-    await interaction.editReply("Timi could not create your ticket. Check its Manage Channels permission.");
+    await interaction.editReply("Timi could not create your ticket. Check its Manage Channels permission and role limits.");
+  } finally {
+    ticketCreationLocks.delete(userKey);
+    const cutoff = Date.now() - 60_000;
+    for (const [key, timestamp] of ticketCreationCooldowns) {
+      if (timestamp < cutoff) ticketCreationCooldowns.delete(key);
+    }
   }
 }
 
@@ -395,7 +434,7 @@ async function handleInteraction(interaction, client) {
     }
     const message = await interaction.channel.send(buildPublicPanel(getSettings(interaction.guildId)));
     rememberPublishedPanel(interaction.guildId, interaction.channelId, message.id);
-    await interaction.reply({ content: "Ticket panel published in this channel. You can edit it anytime with /ticketpanel; saved changes will update this panel.", ephemeral: true });
+    await interaction.reply({ content: "Ticket panel published in this channel. You can edit it anytime with /ticketconfig; saved changes will update this panel.", ephemeral: true });
     return true;
   }
 
@@ -404,7 +443,7 @@ async function handleInteraction(interaction, client) {
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("ticketpanel")
+    .setName("ticketconfig")
     .setDescription("Customize and publish the ticket panel.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   async execute(interaction) {
