@@ -16,6 +16,7 @@ const ticketPanel = require("./commands/ticketpanel");
 const recoveryBackup = require("./recovery-backup");
 const securitySettings = require("./security-settings");
 const leveling = require("./leveling");
+const eventLogs = require("./log-settings");
 
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.CLIENT_ID;
@@ -155,15 +156,45 @@ client.on("guildCreate", guild => {
 
 client.on("channelCreate", channel => {
   recoveryBackup.snapshotChannel(channel).catch(error => console.error("Channel backup failed:", error.message));
+  if (channel.guild) eventLogs.log(channel.guild, "channelChanges", "Channel created: #" + channel.name + " (" + channel.id + ").");
 });
 
-client.on("channelUpdate", (_oldChannel, newChannel) => {
+client.on("channelUpdate", (oldChannel, newChannel) => {
   recoveryBackup.snapshotChannel(newChannel).catch(error => console.error("Channel backup update failed:", error.message));
+  if (newChannel.guild) {
+    const changedName = oldChannel.name !== newChannel.name;
+    const changedTopic = oldChannel.topic !== newChannel.topic;
+    eventLogs.log(newChannel.guild, "channelChanges",
+      "Channel updated: #" + newChannel.name + " (" + newChannel.id + ")." +
+      (changedName ? " Previous name: #" + oldChannel.name + "." : "") +
+      (changedTopic ? " Topic changed." : " Channel properties or permissions may have changed."));
+  }
 });
 
 // Archive messages continuously; the recovery module retains the most recent seven days.
 client.on("messageCreate", message => {
   recoveryBackup.backupMessage(message).catch(error => console.error("Message backup failed:", error.message));
+});
+
+client.on("messageDelete", message => {
+  if (!message.guild || message.author?.bot) return;
+  const content = String(message.content || "[message content unavailable]").slice(0, 700);
+  eventLogs.log(message.guild, "messageDeletes",
+    "Message deleted in <#" + message.channelId + "> by " +
+    (message.author ? message.author.tag + " (" + message.author.id + ")" : "an unknown user") +
+    ". Content: " + content);
+});
+
+client.on("messageUpdate", (oldMessage, newMessage) => {
+  const guild = newMessage.guild || oldMessage.guild;
+  if (!guild || newMessage.author?.bot) return;
+  if (oldMessage.content === newMessage.content) return;
+  const before = String(oldMessage.content || "[old content unavailable]").slice(0, 600);
+  const after = String(newMessage.content || "[empty message]").slice(0, 600);
+  eventLogs.log(guild, "messageEdits",
+    "Message edited in <#" + newMessage.channelId + "> by " +
+    (newMessage.author ? newMessage.author.tag + " (" + newMessage.author.id + ")" : "unknown user") +
+    ". Before: " + before + ". After: " + after);
 });
 
 client.on("interactionCreate", async interaction => {
@@ -295,18 +326,42 @@ client.on("guildMemberAdd", member => {
   commands.get("welcomeconfig")?.onMemberJoin?.(member).catch(error => {
     console.error("Welcome message failed:", error.message);
   });
-  const moderation = commands.get("moderationconfig");
-  if (moderation?.getSettings) {
-    sendModerationLog(member.guild, moderation.getSettings(member.guild),
-      "Member joined: <@" + member.id + "> (" + member.user.tag + ").");
-  }
+  eventLogs.log(member.guild, "memberJoins",
+    "Member joined: " + member.user.tag + " (" + member.id + ").");
 });
 client.on("guildMemberRemove", member => {
-  const moderation = commands.get("moderationconfig");
-  if (moderation?.getSettings) {
-    sendModerationLog(member.guild, moderation.getSettings(member.guild),
-      "Member left: " + member.user.tag + " (" + member.id + ").");
-  }
+  eventLogs.log(member.guild, "memberLeaves",
+    "Member left: " + member.user.tag + " (" + member.id + ").");
+});
+
+client.on("guildMemberUpdate", (oldMember, newMember) => {
+  const oldRoles = new Set(oldMember.roles.cache.keys());
+  const newRoles = new Set(newMember.roles.cache.keys());
+  const added = [...newRoles].filter(id => !oldRoles.has(id));
+  const removed = [...oldRoles].filter(id => !newRoles.has(id));
+  if (!added.length && !removed.length) return;
+  const changes = [];
+  if (added.length) changes.push("added " + added.map(id => "<@&" + id + ">").join(", "));
+  if (removed.length) changes.push("removed " + removed.map(id => "<@&" + id + ">").join(", "));
+  eventLogs.log(newMember.guild, "roleChanges",
+    "Roles changed for " + newMember.user.tag + " (" + newMember.id + "): " + changes.join("; ") + ".");
+});
+
+client.on("guildRoleCreate", role => {
+  eventLogs.log(role.guild, "roleChanges", "Role created: " + role.name + " (" + role.id + ").");
+});
+client.on("guildRoleDelete", role => {
+  eventLogs.log(role.guild, "roleChanges", "Role deleted: " + role.name + " (" + role.id + ").");
+});
+client.on("guildRoleUpdate", (oldRole, newRole) => {
+  eventLogs.log(newRole.guild, "roleChanges",
+    "Role updated: " + newRole.name + " (" + newRole.id + "); role name or permissions may have changed.");
+});
+client.on("guildBanAdd", ban => {
+  eventLogs.log(ban.guild, "banEvents", "Member banned: " + ban.user.tag + " (" + ban.user.id + ").");
+});
+client.on("guildBanRemove", ban => {
+  eventLogs.log(ban.guild, "banEvents", "Member unbanned: " + ban.user.tag + " (" + ban.user.id + ").");
 });
 
 const channelDeletionHistory = new Map();
