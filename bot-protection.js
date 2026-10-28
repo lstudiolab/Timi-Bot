@@ -183,6 +183,14 @@ async function handleInteraction(interaction, client) {
 
     for (const target of guild.channels.cache.values()) {
       if (!target.permissionOverwrites) continue;
+      if (target.name === "timi-confirmations" || target.name === "timi-logs") {
+        await target.permissionOverwrites.edit(botId, {
+          ViewChannel: false,
+          SendMessages: false,
+          ReadMessageHistory: false
+        }, { reason: "Keep approved bots out of Timi private channels" }).catch(() => {});
+        continue;
+      }
       await target.permissionOverwrites.edit(botId, baseline, {
         reason: `Bot approved by ${interaction.user.tag} through Timi bot protection`
       }).catch(error => {
