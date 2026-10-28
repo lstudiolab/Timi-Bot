@@ -6,7 +6,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("warn")
     .setDescription("Record a warning for a server member.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers | PermissionFlagsBits.ManageGuild)
     .addUserOption(option => option.setName("member").setDescription("Member to warn").setRequired(true))
     .addStringOption(option => option.setName("reason").setDescription("Reason for the warning").setRequired(true).setMaxLength(1000)),
   async execute(interaction) {
