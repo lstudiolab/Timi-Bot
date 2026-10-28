@@ -101,6 +101,17 @@ function saveSettings(guildId, settings) {
   writeStore(store);
 }
 
+function resetSettings(guild) {
+  const current = getSettings(guild);
+  const next = {
+    ...DEFAULT_SETTINGS,
+    panelChannelId: current.panelChannelId || null,
+    panelMessageId: current.panelMessageId || null
+  };
+  saveSettings(guild.id, next);
+  return getSettings(guild);
+}
+
 function sanctionText(settings) {
   if (settings.sanction === "timeout") {
     return `Member timeout (${settings.timeoutMinutes} minutes)`;
@@ -443,5 +454,6 @@ module.exports = {
   handleInteraction,
   getSettings,
   saveSettings,
+  resetSettings,
   refreshPanel
 };
