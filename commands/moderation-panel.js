@@ -377,5 +377,6 @@ module.exports = {
     settings.panelMessageId = message.id;
     saveSettings(interaction.guildId, settings);
   },
-  handleInteraction
+  handleInteraction,
+  getSettings
 };
