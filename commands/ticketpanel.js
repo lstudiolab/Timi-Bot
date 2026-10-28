@@ -172,7 +172,8 @@ function buildConfigPanel(settings) {
     new ButtonBuilder().setCustomId("ticket:edit-category").setLabel("Edit Category").setStyle(ButtonStyle.Secondary)
   );
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("ticket:publish").setLabel("Publish Panel").setStyle(ButtonStyle.Primary)
+    new ButtonBuilder().setCustomId("ticket:publish").setLabel("Publish Panel").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("ticket:edit-delay").setLabel("Close Delay").setStyle(ButtonStyle.Secondary)
   );
   const row3 = new ActionRowBuilder().addComponents(
     new RoleSelectMenuBuilder().setCustomId("ticket:support-roles").setPlaceholder("Select support roles").setMinValues(0).setMaxValues(10)
@@ -215,6 +216,22 @@ async function findOrCreateCategory(guild, name, client) {
   });
 }
 
+async function sendTranscript(channel, settings, guild) {
+  if (!settings.transcriptChannelId) return;
+  const destination = await guild.channels.fetch(settings.transcriptChannelId).catch(() => null);
+  if (!destination?.isTextBased() || !destination.isSendable()) return;
+  const fetched = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+  const messages = fetched ? [...fetched.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp) : [];
+  const lines = messages.map(message => {
+    const body = String(message.content || "").replace(/\\r?\\n/g, " ");
+    const files = [...message.attachments.values()].map(file => file.url).join(" ");
+    return "[" + new Date(message.createdTimestamp).toISOString() + "] " + message.author.tag + ": " + body + (files ? " " + files : "");
+  });
+  const transcript = (lines.join("\\n") || "No messages were available for this ticket.").slice(0, 450000);
+  const file = new AttachmentBuilder(Buffer.from(transcript, "utf8"), { name: "transcript-" + channel.id + ".txt" });
+  const ownerId = String(channel.topic || "").slice("timi-ticket-owner:".length);
+  await destination.send({ content: "Transcript for ticket #" + channel.name + " (owner <@" + ownerId + ">).", files: [file], allowedMentions: { parse: [] } });
+}
 async function openTicket(interaction, client) {
   const guild = interaction.guild;
   const userKey = `${guild.id}:${interaction.user.id}`;
@@ -400,16 +417,21 @@ async function handleInteraction(interaction, client) {
       return true;
     }
 
-    await interaction.update({ content: "Closing this ticket in 5 seconds…", components: [] });
-    setTimeout(() => {
-      channel.delete("Ticket closed by its owner or a server manager").catch(error => {
-        console.error("Could not delete closed ticket:", error.message);
-      });
-    }, 5000);
+    const settings = getSettings(interaction.guildId);
+    const delay = Math.max(0, Math.min(60, Number(settings.closeDelaySeconds ?? 5)));
+    await interaction.update({ content: "Closing this ticket in " + delay + " seconds…", components: [] });
+    setTimeout(async () => {
+      try {
+        await sendTranscript(channel, settings, interaction.guild);
+        await channel.delete("Ticket closed by its owner or a server manager");
+      } catch (error) {
+        console.error("Could not finish ticket closure:", error.message);
+      }
+    }, delay * 1000);
     return true;
   }
 
-  if (id === "ticket:edit-panel" || id === "ticket:edit-ticket" || id === "ticket:edit-category") {
+  if (id === "ticket:edit-panel" || id === "ticket:edit-ticket" || id === "ticket:edit-category" || id === "ticket:edit-delay") {
     if (!isManager(interaction)) {
       await interaction.reply({ content: "You need Manage Server permission to configure tickets.", ephemeral: true });
       return true;
@@ -433,6 +455,13 @@ async function handleInteraction(interaction, client) {
           new ActionRowBuilder().addComponents(makeInput("message", "Message inside each ticket", settings.ticketMessage, TextInputStyle.Paragraph, 1000)),
           new ActionRowBuilder().addComponents(makeInput("close-label", "Close button label", settings.closeButtonLabel, TextInputStyle.Short, 80))
         );
+    } else if (id === "ticket:edit-delay") {
+      modal = new ModalBuilder()
+        .setCustomId("ticket:modal-delay")
+        .setTitle("Customize Close Delay")
+        .addComponents(new ActionRowBuilder().addComponents(
+          makeInput("delay", "Delay from 0 to 60 seconds", String(settings.closeDelaySeconds ?? 5), TextInputStyle.Short, 2)
+        ));
     } else {
       modal = new ModalBuilder()
         .setCustomId("ticket:modal-category")
@@ -483,6 +512,13 @@ async function handleInteraction(interaction, client) {
       settings.closeButtonLabel = interaction.fields.getTextInputValue("close-label").trim();
     } else if (id === "ticket:modal-category") {
       settings.categoryName = interaction.fields.getTextInputValue("category").trim();
+    } else if (id === "ticket:modal-delay") {
+      const delay = Number(interaction.fields.getTextInputValue("delay").trim());
+      if (!Number.isInteger(delay) || delay < 0 || delay > 60) {
+        await interaction.reply({ content: "Close delay must be a whole number from 0 to 60 seconds.", ephemeral: true });
+        return true;
+      }
+      settings.closeDelaySeconds = delay;
     } else {
       return false;
     }
