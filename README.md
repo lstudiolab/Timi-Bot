@@ -28,6 +28,10 @@ A JavaScript Discord bot with a moderation configuration panel.
 
 Timi registers slash commands when it starts. When `GUILD_ID` is set, commands are registered to that test server for faster updates. If it is omitted, commands are registered globally, which can take longer to appear.
 
+## Server setup
+
+Run `/setup` with the Manage Server permission. Timi creates `#timi-logs` and `#timi-confirmations`, both private to the server owner, the user who ran `/setup`, and Timi. The log channel is saved as the server's moderation log destination. Timi needs Manage Channels permission. If either channel name already exists, setup stops rather than changing existing channel permissions.
+
 ## Moderation panel
 
 Run `/moderation-panel` in a server. You need the **Manage Server** permission.
