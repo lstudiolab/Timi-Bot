@@ -143,7 +143,7 @@ function buildConfigPanel(settings) {
     .setColor(parseInt(settings.panelColor || "808080", 16))
     .setTitle("Ticket Panel Configuration")
     .setDescription(
-      `**Panel title:** ${settings.panelTitle}\n**Panel description:** ${settings.panelDescription}\n**Open button:** ${settings.openButtonLabel}\n**Ticket message:** ${settings.ticketMessage}\n**Close button:** ${settings.closeButtonLabel}\n**Category:** ${settings.categoryName}\n**Support roles:** ${(settings.supportRoleIds || []).map(roleId => `<@&${roleId}>`).join(", ") || "Server managers only"}\n**Transcript channel:** ${settings.transcriptChannelId ? `<#${settings.transcriptChannelId}>` : "Not configured"}\n**Close delay:** ${settings.closeDelaySeconds ?? 5} seconds\n\nEdit each part, then use Publish Panel to post the public ticket panel in this channel.`
+      `**Panel title:** ${settings.panelTitle}\n**Panel description:** ${settings.panelDescription}\n**Open button:** ${settings.openButtonLabel}\n**Ticket message:** ${settings.ticketMessage}\n**Close button:** ${settings.closeButtonLabel}\n**Category:** ${settings.categoryName}\n**Panel color:** #${settings.panelColor || "808080"}\n**Support roles:** ${(settings.supportRoleIds || []).map(roleId => `<@&${roleId}>`).join(", ") || "Server managers only"}\n**Transcript channel:** ${settings.transcriptChannelId ? `<#${settings.transcriptChannelId}>` : "Not configured"}\n**Close delay:** ${settings.closeDelaySeconds ?? 5} seconds\n\nEdit each part, then use Publish Panel to post the public ticket panel in this channel.`
     );
 
   const row1 = new ActionRowBuilder().addComponents(
@@ -166,7 +166,7 @@ function buildConfigPanel(settings) {
 
 function buildPublicPanel(settings) {
   const embed = new EmbedBuilder()
-    .setColor(0x808080)
+    .setColor(parseInt(settings.panelColor || "808080", 16))
     .setTitle(settings.panelTitle)
     .setDescription(settings.panelDescription);
   const row = new ActionRowBuilder().addComponents(
@@ -435,7 +435,8 @@ async function handleInteraction(interaction, client) {
         .addComponents(
           new ActionRowBuilder().addComponents(makeInput("title", "Panel title", settings.panelTitle)),
           new ActionRowBuilder().addComponents(makeInput("description", "Panel description", settings.panelDescription, TextInputStyle.Paragraph, 1000)),
-          new ActionRowBuilder().addComponents(makeInput("open-label", "Open button label", settings.openButtonLabel, TextInputStyle.Short, 80))
+          new ActionRowBuilder().addComponents(makeInput("open-label", "Open button label", settings.openButtonLabel, TextInputStyle.Short, 80)),
+          new ActionRowBuilder().addComponents(makeInput("panel-color", "Panel color (6 hex digits)", settings.panelColor || "808080", TextInputStyle.Short, 6))
         );
     } else if (id === "ticket:edit-ticket") {
       modal = new ModalBuilder()
@@ -497,6 +498,11 @@ async function handleInteraction(interaction, client) {
       settings.panelTitle = interaction.fields.getTextInputValue("title").trim();
       settings.panelDescription = interaction.fields.getTextInputValue("description").trim();
       settings.openButtonLabel = interaction.fields.getTextInputValue("open-label").trim();
+      settings.panelColor = interaction.fields.getTextInputValue("panel-color").trim().replace(/^#/, "").toUpperCase();
+      if (!/^[0-9A-F]{6}$/.test(settings.panelColor)) {
+        await interaction.reply({ content: "Panel color must be exactly six hexadecimal digits, such as 808080.", ephemeral: true });
+        return true;
+      }
     } else if (id === "ticket:modal-ticket") {
       settings.ticketMessage = interaction.fields.getTextInputValue("message").trim();
       settings.closeButtonLabel = interaction.fields.getTextInputValue("close-label").trim();
