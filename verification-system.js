@@ -57,12 +57,17 @@ function hashIp(ip) {
   return crypto.createHmac("sha256", secret).update(String(ip || "unknown")).digest("hex");
 }
 function clientIp(req) {
-  // Only trust proxy headers when the operator explicitly enables this on a trusted host.
+  // Only enable this behind a trusted reverse proxy that appends the actual client
+  // address to X-Forwarded-For. Never trust the leftmost value: clients can often
+  // supply that value themselves and rotate it to evade per-IP rate limits.
   if (process.env.TRUST_PROXY === "true") {
     const forwarded = req.headers["x-forwarded-for"];
     if (typeof forwarded === "string" && forwarded.length < 1024) {
-      const first = forwarded.split(",")[0].trim();
-      if (first) return first;
+      const chain = forwarded.split(",").map(value => value.trim()).filter(Boolean);
+      const candidate = chain.at(-1);
+      if (candidate && candidate.length <= 64 && /^[0-9a-fA-F:.]+$/.test(candidate)) {
+        return candidate;
+      }
     }
   }
   return req.socket.remoteAddress || "unknown";
