@@ -85,7 +85,7 @@ The verification website can be split across two hosts so the Discord bot and it
 
 - **Render Static Site:** publishes the `public/` directory only. It serves the HTML, CSS, and browser JavaScript over HTTPS; it does not run the Discord bot.
 - **Termux on Android:** runs `node index.js`, the Discord bot, active verification sessions, rate-limit state, and SMTP email delivery.
-- **HTTPS tunnel:** exposes the local Termux HTTP server on port `3000) through a public HTTPS URL. A phone on a mobile carrier network generally cannot accept direct inbound connections, so use a tunnel.
+- **HTTPS tunnel:** exposes the local Termux HTTP server on port `3000` through a public HTTPS URL. A phone on a mobile carrier network generally cannot accept direct inbound connections, so use a tunnel.
 - **Session continuity:** do not run a second bot copy on Render. Sessions are in memory and must be created and consumed by the same running Termux process.
 
 ### Configure Render Static Site
