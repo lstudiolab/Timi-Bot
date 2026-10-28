@@ -549,13 +549,16 @@ async function handleInteraction(interaction, client) {
     const published = Array.isArray(settings.publishedPanels) ? settings.publishedPanels : [];
     if (published.length) {
       await refreshPublishedPanels(interaction.guild, settings);
-      await interaction.update({
-        ...buildConfigPanel(getSettings(interaction.guildId)),
-        content: "Existing published ticket panels have been updated."
-      });
-      return true;
+      const remaining = getSettings(interaction.guildId).publishedPanels || [];
+      if (remaining.length) {
+        await interaction.update({
+          ...buildConfigPanel(getSettings(interaction.guildId)),
+          content: "Existing published ticket panels have been updated."
+        });
+        return true;
+      }
     }
-    const message = await interaction.channel.send(buildPublicPanel(settings));
+    const message = await interaction.channel.send(buildPublicPanel(getSettings(interaction.guildId)));
     rememberPublishedPanel(interaction.guildId, interaction.channelId, message.id);
     await interaction.update({
       ...buildConfigPanel(getSettings(interaction.guildId)),
