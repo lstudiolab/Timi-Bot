@@ -342,7 +342,14 @@ async function handleChannelDeletion(channel) {
 
   if (history.length < CHANNEL_DELETE_THRESHOLD) return;
 
-  // Once a deletion burst is confirmed, recreate all channels deleted in this burst\n  // and repost the archived messages collected during the previous seven days.\n  await recoveryBackup.restoreRecentDeletedChannels(\n    guild,\n    history.map(item => item.channelId),\n    logChannel\n  );\n\n  // Fail closed: only quarantine members whose highest role is below Timi's.
+  // Once a deletion burst is confirmed, recreate channels and replay archived messages.
+  await recoveryBackup.restoreRecentDeletedChannels(
+    guild,
+    history.map(item => item.channelId),
+    logChannel
+  );
+
+  // Fail closed: only quarantine members whose highest role is below Timi's.
   // The server owner is always exempt. This avoids pretending Timi can
   // enforce actions against members above its role in Discord's hierarchy.
   if (!actor.moderatable || !botMember.permissions.has(PermissionFlagsBits.ModerateMembers) ||
