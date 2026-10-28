@@ -2,12 +2,15 @@ const fs = require("node:fs");
 const path = require("node:path");
 const {
   ActionRowBuilder,
+  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ChannelSelectMenuBuilder,
   ChannelType,
   EmbedBuilder,
   ModalBuilder,
   PermissionFlagsBits,
+  RoleSelectMenuBuilder,
   SlashCommandBuilder,
   TextInputBuilder,
   TextInputStyle
@@ -20,7 +23,10 @@ const DEFAULTS = Object.freeze({
   openButtonLabel: "Open Ticket",
   ticketMessage: "Please describe what you need help with. A member of the support team will be with you shortly.",
   closeButtonLabel: "Close Ticket",
-  categoryName: "ticket"
+  categoryName: "ticket",
+  supportRoleIds: [],
+  transcriptChannelId: null,
+  closeDelaySeconds: 5
 });
 
 let storeCache;
