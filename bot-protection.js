@@ -40,8 +40,9 @@ async function restorePermissions(guild, botId, record) {
     try {
       const channel = guild.channels.cache.get(saved.channelId) || await guild.channels.fetch(saved.channelId).catch(() => null);
       if (!channel?.permissionOverwrites) continue;
-      const current = channel.permissionOverwrites.cache.get(botId);
-      if (current) await current.delete("Restore pre-approval bot permissions");
+      if (channel.permissionOverwrites.cache.has(botId)) {
+        await channel.permissionOverwrites.delete(botId, "Restore pre-approval bot permissions");
+      }
       if (saved.exists) {
         await channel.permissionOverwrites.create(botId, { allow: BigInt(saved.allow), deny: BigInt(saved.deny) }, { reason: "Restore pre-approval bot permissions" });
       }
@@ -191,7 +192,7 @@ async function handleInteraction(interaction, client) {
   if (decision === "no") {
     if (member) {
       const botMember = guild.members.me || await guild.members.fetch(client.user.id);
-      if (!botMember.permissions.has(PermissionFlagsBits.KickMembers)) {
+      if (!botMember.permissions.has(PermissionFlagsBits.KickMembers) || !member.kickable) {
         await interaction.reply({
           content: "Timi needs Kick Members permission to reject and remove this bot.",
           ephemeral: true
