@@ -216,15 +216,25 @@ async function openTicket(interaction, client) {
       .replace(/^-|-$/g, "")
       .slice(0, 80) || interaction.user.id;
 
-    const roleDenies = [...guild.roles.cache.values()]
-      .filter(role => role.id !== guild.roles.everyone.id)
+    // Private by default: deny @everyone, grant the ticket owner and Timi,
+    // and explicitly grant access only to roles that have ManageGuild.
+    // Do not create a deny overwrite for every role: it both wastes Discord's
+    // 100-overwrite limit and blocks legitimate moderators from seeing tickets.
+    const managerRoles = [...guild.roles.cache.values()]
+      .filter(role =>
+        role.id !== guild.roles.everyone.id &&
+        !role.managed &&
+        role.permissions.has(PermissionFlagsBits.ManageGuild)
+      )
+      .slice(0, 95)
       .map(role => ({
         id: role.id,
-        deny: [PermissionFlagsBits.ViewChannel]
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory
+        ]
       }));
-    if (roleDenies.length + 3 > 100) {
-      throw new Error("Too many roles to safely create a private ticket channel (Discord allows at most 100 permission overwrites).");
-    }
 
     const channel = await guild.channels.create({
       name: `ticket-${safeName}`.slice(0, 100),
@@ -233,7 +243,7 @@ async function openTicket(interaction, client) {
       topic: `timi-ticket-owner:${interaction.user.id}`,
       permissionOverwrites: [
         { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-        ...roleDenies,
+        ...managerRoles,
         {
           id: interaction.user.id,
           allow: [
