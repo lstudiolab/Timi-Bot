@@ -8,7 +8,7 @@ const {
 } = require("discord.js");
 
 const pending = new Map();
-const CONFIRMATION_CHANNEL = "timi-confirmations";
+const CONFIRMATION_CHANNEL = "timi";
 
 async function getConfirmationChannel(guild, client) {
   let channel = guild.channels.cache.find(
@@ -24,7 +24,7 @@ async function getConfirmationChannel(guild, client) {
     channel = await guild.channels.create({
       name: CONFIRMATION_CHANNEL,
       type: ChannelType.GuildText,
-      topic: "Private bot approval requests managed by Timi.",
+      topic: "Private moderation alerts and bot approval requests managed by Timi.",
       permissionOverwrites: [
         {
           id: guild.roles.everyone.id,
@@ -48,7 +48,7 @@ async function getConfirmationChannel(guild, client) {
           ]
         }
       ],
-      reason: "Create private channel for bot approval requests"
+      reason: "Use private owner-only Timi channel for bot approval requests"
     });
   }
 
@@ -183,7 +183,7 @@ async function handleInteraction(interaction, client) {
 
     for (const target of guild.channels.cache.values()) {
       if (!target.permissionOverwrites) continue;
-      if (target.name === "timi-confirmations" || target.name === "timi-logs") {
+      if (target.name === "timi" || target.name === "timi-confirmations" || target.name === "timi-logs") {
         await target.permissionOverwrites.edit(botId, {
           ViewChannel: false,
           SendMessages: false,
