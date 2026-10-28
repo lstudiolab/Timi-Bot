@@ -370,24 +370,9 @@ async function handleChannelDeletion(channel) {
       `Timi anti-nuke: deleted ${history.length} channels within 60 seconds`
     );
 
-    const removableRoles = actor.roles.cache.filter(role =>
-      role.id !== guild.id &&
-      !role.managed &&
-      role.editable
-    );
-
-    for (const role of removableRoles.values()) {
-      await actor.roles.remove(
-        role,
-        "Timi anti-nuke quarantine after repeated channel deletion"
-      ).catch(error => {
-        console.error(`Could not remove role ${role.id} from ${actor.id}:`, error.message);
-      });
-    }
-
     if (logChannel?.isTextBased() && logChannel.isSendable()) {
       await logChannel.send({
-        content: `Anti-nuke action: <@${actor.id}> was timed out for 60 minutes and Timi attempted to remove all editable, non-managed roles after deleting ${history.length} channels in 60 seconds. Review the audit log and restore access only after investigation.`,
+        content: `Anti-nuke action: <@${actor.id}> was timed out for 60 minutes after deleting ${history.length} channels in 60 seconds. No roles were changed automatically; review the audit log before taking further action.`,
         allowedMentions: { parse: [] }
       }).catch(() => {});
     }
