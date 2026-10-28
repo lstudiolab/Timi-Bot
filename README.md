@@ -87,7 +87,7 @@ Timi now includes a small HTTPS-hosted verification site and Discord verificatio
 - Add the environment variables from `.env.example` to Render. Set `BASE_URL` to the public HTTPS URL assigned to this service.
 - Configure SMTP credentials for a real email provider. `VERIFICATION_FROM` must be an address authorized by that provider. Do not commit secrets.
 - Use a persistent disk mounted at the repository's `data` directory if you need the JSON settings and seven-day IP blocks to survive service restarts. A database is preferable for multiple instances; this implementation is intended for one running instance.
-- The website starts when a verification command is first used. `GET /health` is available for a service health check.
+- The website starts when Timi becomes ready. `GET /health` is available for a service health check.
 
 ### Discord setup
 
