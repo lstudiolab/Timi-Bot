@@ -41,6 +41,14 @@ function saveSettings(guildId, config) {
   write(value);
   return settings(guildId);
 }
+function resetSettings(guildId) {
+  const value = read();
+  if (!value[guildId]) value[guildId] = { users: {} };
+  value[guildId].settings = { ...DEFAULTS };
+  if (!value[guildId].users) value[guildId].users = {};
+  write(value);
+  return settings(guildId);
+}
 function getUser(guildId, userId) {
   const value = read();
   if (!value[guildId]) value[guildId] = { settings: { ...DEFAULTS }, users: {} };
@@ -92,4 +100,4 @@ function pay(guildId, fromId, toId, amount) {
   write(value);
   return { balance: from.balance };
 }
-module.exports = { DEFAULTS, settings, saveSettings, getBalance, collect, pay };
+module.exports = { DEFAULTS, settings, saveSettings, resetSettings, getBalance, collect, pay };
