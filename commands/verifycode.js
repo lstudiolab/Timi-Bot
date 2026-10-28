@@ -11,6 +11,12 @@ module.exports = {
       return;
     }
     panelCommand.initialize(client);
+    const verification = require("../verification-system");
+    const settings = verification.getSettings(interaction.guildId);
+    if (settings.channelId && interaction.channelId !== settings.channelId) {
+      await interaction.reply({ content: `Use /verifycode in <#${settings.channelId}> so the verification prompts stay in the configured channel.`, ephemeral: true });
+      return;
+    }
     await interaction.reply({
       content: "If you have requested a code on the Timi verification website, use the button below to enter it.",
       components: [new ActionRowBuilder().addComponents(
