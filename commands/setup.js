@@ -53,7 +53,7 @@ function privateOverwrites(guild, userId, botId) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("setup")
-    .setDescription("Create Timi's private log and confirmation channels.")
+    .setDescription("Create Timi's private channels and ticket category.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
   async execute(interaction, client) {
@@ -86,6 +86,20 @@ module.exports = {
     }
 
     try {
+      // Ensure the standard ticket category exists as part of setup.
+      const ticketCategoryName = "ticket";
+      let ticketCategory = guild.channels.cache.find(
+        channel => channel.type === ChannelType.GuildCategory &&
+          channel.name.toLowerCase() === ticketCategoryName
+      );
+      if (!ticketCategory) {
+        ticketCategory = await guild.channels.create({
+          name: ticketCategoryName,
+          type: ChannelType.GuildCategory,
+          reason: `Create ticket category during setup requested by ${interaction.user.tag}`
+        });
+      }
+
       const names = [
         { name: "timi-logs", topic: "Private moderation and anti-spam logs for Timi." },
         { name: "timi-confirmations", topic: "Private setup and moderation confirmations for Timi." }
@@ -129,7 +143,7 @@ module.exports = {
       });
 
       await interaction.editReply(
-        `Setup complete. Created <#${logChannel.id}> and <#${confirmationChannel.id}>. They are private to you, the server owner, and Timi. The log channel is selected for moderation reports.`
+        `Setup complete. Created <#${logChannel.id}>, <#${confirmationChannel.id}>, and the ${ticketCategoryName} category. The private channels are restricted as configured, and the log channel is selected for moderation reports.`
       );
     } catch (error) {
       console.error("Setup command failed:", error);
