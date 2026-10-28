@@ -217,7 +217,7 @@ async function openTicket(interaction, client) {
       .slice(0, 80) || interaction.user.id;
 
     const roleDenies = [...guild.roles.cache.values()]
-      .filter(role => role.id !== guild.roles.everyone.id && !role.managed)
+      .filter(role => role.id !== guild.roles.everyone.id)
       .map(role => ({
         id: role.id,
         deny: [PermissionFlagsBits.ViewChannel]
