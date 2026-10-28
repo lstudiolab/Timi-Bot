@@ -6,3 +6,6 @@ npm-debug.log*
 .DS_Store
 data/*.json
 data/*.tmp
+data/*.sqlite
+data/*.sqlite-*
+data/*.migrated
