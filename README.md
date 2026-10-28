@@ -104,7 +104,7 @@ Timi now includes a small HTTPS-hosted verification site and Discord verificatio
 - A code can be accepted once. Verification sessions expire after 30 minutes; five incorrect attempts are allowed before the session is invalidated.
 - A hashed network identifier is used for request-rate tracking. At 20 requests in a rolling 24-hour period, that network hash is blocked for seven days. The raw IP is not written to the JSON store.
 - A ten-slot heuristic organizer (nine signals plus an aggregate-risk slot) flags unusual request volume, repeated email requests, failed codes, missing browser identification, rapid requests, session reuse, and network changes. Alerts are sent to the private `#timi` channel when available. Signals are heuristic and can produce false positives.
-- Do not expose the service directly without HTTPS. The app intentionally does not trust arbitrary `X-Forwarded-For` headers; verify your host's proxy/network setup before relying on IP rate limits.
+- Do not expose the service directly without HTTPS. Set `TRUST_PROXY=true` only when the app is behind a trusted reverse proxy such as Render's; otherwise leave it false. The app uses the first `X-Forwarded-For` address only when this flag is explicitly enabled.
 
 ### Important deployment note
 
