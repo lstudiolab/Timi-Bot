@@ -375,8 +375,7 @@ async function handleChannelDeletion(channel) {
   // Fail closed: only quarantine members whose highest role is below Timi's.
   // The server owner is always exempt. This avoids pretending Timi can
   // enforce actions against members above its role in Discord's hierarchy.
-  if (!actor.moderatable || !botMember.permissions.has(PermissionFlagsBits.ModerateMembers) ||
-      !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+  if (!actor.moderatable || !botMember.permissions.has(PermissionFlagsBits.ModerateMembers)) {
     if (logChannel?.isTextBased() && logChannel.isSendable()) {
       await logChannel.send({
         content: `Critical security alert: <@${actor.id}> reached the channel-deletion threshold, but Timi could not quarantine them because of missing permissions or role hierarchy. Manually review the audit log immediately.`,
