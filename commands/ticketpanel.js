@@ -120,6 +120,38 @@ function makeInput(id, label, value, style = TextInputStyle.Short, maxLength = 1
   return input;
 }
 
+async function refreshConfigPanel(guild, settings) {
+  const panel = settings.configPanel;
+  if (!panel?.channelId || !panel?.messageId) return false;
+  try {
+    const channel = guild.channels.cache.get(panel.channelId) || await guild.channels.fetch(panel.channelId);
+    if (!channel?.isTextBased()) return false;
+    const message = await channel.messages.fetch(panel.messageId);
+    await message.edit(buildConfigPanel(settings));
+    return true;
+  } catch (error) {
+    console.error("Could not refresh ticket configuration panel:", error.message);
+    return false;
+  }
+}
+
+async function openOrUpdateConfig(interaction) {
+  const settings = getSettings(interaction.guildId);
+  const panel = settings.configPanel;
+  if (panel?.channelId && panel?.messageId) {
+    const channel = interaction.guild.channels.cache.get(panel.channelId) || await interaction.guild.channels.fetch(panel.channelId).catch(() => null);
+    const existing = channel?.isTextBased() ? await channel.messages.fetch(panel.messageId).catch(() => null) : null;
+    if (existing) {
+      await existing.edit(buildConfigPanel(settings));
+      await interaction.reply({ content: "Updated the existing ticket configuration panel.", ephemeral: true });
+      return;
+    }
+  }
+  await interaction.reply(buildConfigPanel(settings));
+  const message = await interaction.fetchReply();
+  settings.configPanel = { channelId: message.channelId, messageId: message.id };
+  saveSettings(interaction.guildId, settings);
+}
 function buildConfigPanel(settings) {
   const embed = new EmbedBuilder()
     .setColor(0x808080)
@@ -136,7 +168,7 @@ function buildConfigPanel(settings) {
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("ticket:publish").setLabel("Publish Panel").setStyle(ButtonStyle.Primary)
   );
-  return { embeds: [embed], components: [row1, row2], ephemeral: true };
+  return { embeds: [embed], components: [row1, row2] };
 }
 
 function buildPublicPanel(settings) {
@@ -425,7 +457,8 @@ async function handleInteraction(interaction, client) {
       return true;
     }
     saveSettings(interaction.guildId, settings);
-    await interaction.reply({ content: "Ticket settings saved. Updating published panels...", ephemeral: true });
+    await interaction.reply({ content: "Ticket settings saved.", ephemeral: true });
+    await refreshConfigPanel(interaction.guild, settings);
     await refreshPublishedPanels(interaction.guild, settings);
     await interaction.editReply({ content: "Ticket settings saved. Published panels have been updated." });
     return true;
@@ -462,7 +495,18 @@ module.exports = {
       await interaction.reply({ content: "You need Manage Server permission to configure tickets.", ephemeral: true });
       return;
     }
-    await interaction.reply(buildConfigPanel(getSettings(interaction.guildId)));
+    await openOrUpdateConfig(interaction);
+  },
+  async executeConfig(interaction) {
+    if (!interaction.inGuild()) {
+      await interaction.reply({ content: "This command can only be used in a server.", ephemeral: true });
+      return;
+    }
+    if (!isManager(interaction)) {
+      await interaction.reply({ content: "You need Manage Server permission to configure tickets.", ephemeral: true });
+      return;
+    }
+    await openOrUpdateConfig(interaction);
   },
   handleInteraction
 };
