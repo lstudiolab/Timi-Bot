@@ -22,7 +22,7 @@ if (!token) {
 }
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
 
 const commands = new Map();
@@ -85,9 +85,9 @@ client.on("interactionCreate", async interaction => {
 
     if (
       interaction.customId?.startsWith("modpanel:") &&
-      commands.has("moderation-panel")
+      commands.has("moderationconfig")
     ) {
-      await commands.get("moderation-panel").handleInteraction(interaction, client);
+      await commands.get("moderationconfig").handleInteraction(interaction, client);
     }
   } catch (error) {
     console.error("Interaction failed:", error);
@@ -106,7 +106,62 @@ client.on("guildMemberAdd", member => {
   });
 });
 
-const spamState = new Map();
+
+async function ensurePrivateTimiChannel(guild) {
+  const existing = guild.channels.cache.find(
+    channel => channel.type === 0 && channel.name === "timi"
+  );
+  if (existing) return existing;
+
+  const me = guild.members.me || await guild.members.fetch(client.user.id);
+  if (!me.permissions.has(PermissionFlagsBits.ManageChannels)) {
+    console.error(`Cannot create private Timi channel in ${guild.name}: Manage Channels is missing.`);
+    return null;
+  }
+
+  return guild.channels.create({
+    name: "timi",
+    type: 0,
+    topic: "Private moderation alerts for the server owner.",
+    permissionOverwrites: [
+      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      {
+        id: guild.ownerId,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory
+        ]
+      },
+      {
+        id: client.user.id,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.EmbedLinks,
+          PermissionFlagsBits.ManageMessages
+        ]
+      }
+    ],
+    reason: "Create private owner-only Timi moderation channel"
+  });
+}
+
+client.on("guildCreate", guild => {
+  ensurePrivateTimiChannel(guild).catch(error => {
+    console.error("Could not create private Timi channel:", error.message);
+  });
+});
+
+client.once("ready", async () => {
+  for (const guild of client.guilds.cache.values()) {
+    ensurePrivateTimiChannel(guild).catch(error => {
+      console.error(`Could not ensure private Timi channel in ${guild.name}:`, error.message);
+    });
+  }
+});
+\nconst spamState = new Map();
 const SPAM_WINDOW_MS = 8000;
 const DUPLICATE_WINDOW_MS = 20000;
 const MAX_MENTIONS_PER_MESSAGE = 5;
