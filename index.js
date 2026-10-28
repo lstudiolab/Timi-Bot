@@ -180,9 +180,42 @@ client.on("interactionCreate", async interaction => {
   }
 });
 
+const joinBursts = new Map();
+const RAID_JOIN_WINDOW_MS = 10_000;
+const RAID_JOIN_THRESHOLD = 6;
+const RAID_ALERT_COOLDOWN_MS = 60_000;
+const raidAlertTimes = new Map();
+
+async function monitorJoinBurst(member) {
+  if (member.user.bot) return;
+  const guildId = member.guild.id;
+  const now = Date.now();
+  const joins = (joinBursts.get(guildId) || []).filter(timestamp => now - timestamp <= RAID_JOIN_WINDOW_MS);
+  joins.push(now);
+  joinBursts.set(guildId, joins);
+
+  if (joins.length < RAID_JOIN_THRESHOLD) return;
+  const lastAlert = raidAlertTimes.get(guildId) || 0;
+  if (now - lastAlert < RAID_ALERT_COOLDOWN_MS) return;
+  raidAlertTimes.set(guildId, now);
+
+  const channel = member.guild.channels.cache.find(
+    item => item.type === ChannelType.GuildText && item.name === "timi"
+  );
+  if (!channel?.isTextBased() || !channel.isSendable()) return;
+
+  await channel.send({
+    content: `Security alert: ${joins.length} human members joined within ${RAID_JOIN_WINDOW_MS / 1000} seconds. This may indicate a raid. Timi has not automatically punished anyone; review the server's verification and invite settings.`,
+    allowedMentions: { parse: [] }
+  }).catch(error => console.error("Could not send raid alert:", error.message));
+}
+
 client.on("guildMemberAdd", member => {
   botProtection.onGuildMemberAdd(member, client).catch(error => {
     console.error("Bot protection failed:", error.message);
+  });
+  monitorJoinBurst(member).catch(error => {
+    console.error("Join-burst monitoring failed:", error.message);
   });
 });
 
