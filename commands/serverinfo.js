@@ -11,9 +11,10 @@ module.exports = {
     const owner = await guild.fetchOwner().catch(() => null);
     const embed = new EmbedBuilder()
       .setColor(0x808080)
-      .setTitle(guild.name)
-      .setThumbnail(guild.iconURL({ size: 256 }))
-      .addFields(
+      .setTitle(guild.name);
+    const iconUrl = guild.iconURL({ size: 256 });
+    if (iconUrl) embed.setThumbnail(iconUrl);
+    embed.addFields(
         { name: "Owner", value: owner ? "<@" + owner.id + ">" : "Unavailable", inline: true },
         { name: "Members", value: String(guild.memberCount), inline: true },
         { name: "Channels", value: String(guild.channels.cache.size), inline: true },
