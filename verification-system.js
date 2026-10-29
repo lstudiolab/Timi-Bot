@@ -121,6 +121,52 @@ async function grantVerificationRole(client, session) {
   catch (error) { console.error("Could not grant verification role:", error.message); return { ok: false, status: 502, message: "Your email was verified, but Discord rejected the role assignment. Contact a server manager." }; }
   return { ok: true, roleName: role.name };
 }
+
+async function apiRequest(pathname, method = "GET", body) {
+  const base = (process.env.API_BASE_URL || "").replace(/\/$/, "");
+  const secret = process.env.BOT_API_SECRET || "";
+  if (!/^https:\/\//i.test(base) || !secret) throw new Error("Set API_BASE_URL and BOT_API_SECRET in the Termux .env file.");
+  const response = await fetch(base + pathname, {
+    method,
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + secret },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(15000)
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.message || ("Verification API returned HTTP " + response.status));
+  return result;
+}
+function startWorker(client) {
+  if (server) return;
+  console.log("Timi verification worker connected to Render API polling.");
+  let running = false;
+  const poll = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const response = await apiRequest("/internal/jobs");
+      for (const job of (response.jobs || [])) {
+        let result;
+        try {
+          result = await grantVerificationRole(client, job);
+          if (result.ok) {
+            await sendSecurityAlert(client, job.guildId, "Verification completed: <@" + job.userId + "> verified their email and was granted the role.");
+          }
+        } catch (error) {
+          console.error("Verification job failed:", error.message);
+          result = { ok: false, status: 502, message: "Timi could not assign the Discord role. Please contact a server manager." };
+        }
+        try { await apiRequest("/internal/jobs/" + encodeURIComponent(job.id) + "/result", "POST", result); }
+        catch (error) { console.error("Could not submit verification result:", error.message); }
+      }
+    } catch (error) {
+      console.error("Render verification API poll failed:", error.message);
+    } finally { running = false; }
+  };
+  poll();
+  const timer = setInterval(poll, 4000);
+  timer.unref();
+}
 function startWebServer(client) {
   if (server) return;
   const port = Number(process.env.PORT || 3000);
@@ -219,12 +265,15 @@ async function handleInteraction(interaction) {
     await interaction.reply({ content: "Complete email verification on the private Timi website link. The configured Discord role will be assigned automatically after the code is accepted.", ephemeral: true });
     return true;
   }
-  const token = randomToken();
-  const session = { userId: interaction.user.id, guildId: interaction.guildId, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL_MS, attempts: 0, used: false };
-  sessions.set(token, session);
   let link;
-  try { link = makeSessionUrl(token); }
-  catch (error) { sessions.delete(token); console.error("Could not create verification URL:", error.message); await interaction.reply({ content: "The verification website is not configured yet. Please contact the server owner.", ephemeral: true }); return true; }
+  try {
+    const created = await apiRequest("/internal/sessions", "POST", { userId: interaction.user.id, guildId: interaction.guildId });
+    link = created.url;
+  } catch (error) {
+    console.error("Could not create verification session:", error.message);
+    await interaction.reply({ content: "The verification website is temporarily unavailable. Please contact the server owner.", ephemeral: true });
+    return true;
+  }
   await interaction.reply({ content: "Open your private verification link: " + link + "\n\nEnter your email and the six-digit code on the website. Timi will assign your configured role automatically when verification succeeds. This private link expires in 30 minutes.", ephemeral: true });
   return true;
 }
@@ -236,4 +285,4 @@ function startSessionCleanup() {
   }, 60000).unref();
 }
 startSessionCleanup();
-module.exports = { startWebServer, handleInteraction, buildPanel, getSettings, saveSettings, makeSessionUrl };
+module.exports = { startWebServer, startWorker, handleInteraction, buildPanel, getSettings, saveSettings, makeSessionUrl };
