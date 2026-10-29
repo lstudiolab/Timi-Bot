@@ -135,7 +135,7 @@ async function initializeGuild(guild) {
 
 client.once("ready", async () => {
   console.log(`Timi is online as ${client.user.tag}`);
-  verification.startWebServer(client);
+  verification.startWorker(client);
   await Promise.allSettled([...client.guilds.cache.values()].map(async guild => {
     await initializeGuild(guild);
     await recoveryBackup.snapshotGuild(guild);
