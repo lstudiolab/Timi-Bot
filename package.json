@@ -4,7 +4,8 @@
   "description": "Timi Discord bot",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "start:api": "node verification-api.js"
   },
   "engines": {
     "node": ">=20.0.0"
