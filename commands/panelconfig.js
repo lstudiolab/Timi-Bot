@@ -3,7 +3,7 @@ const ticketPanel = require("./ticketpanel");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("panelconfig")
+    .setName("ticket-settings")
     .setDescription("Change the settings of your existing ticket panel.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   async execute(interaction) {
