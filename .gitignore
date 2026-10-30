@@ -1,9 +1,7 @@
 /target/
-node_modules/
 /.env
 /.env.*
 !/.env.example
 /data/*.json
 /data/*.tmp
 .DS_Store
-npm-debug.log*

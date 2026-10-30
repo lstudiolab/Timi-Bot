@@ -64,6 +64,12 @@ Ticket configuration covers the panel title and description, open and close butt
 
 Timi stores runtime settings and recovery records under `DATA_DIR` (default: `data`). Back up this directory before replacing the installation or moving to another device. Keep backups private because they may contain server configuration and archived message content.
 
+## Rust-only runtime
+
+The Discord gateway, slash commands, ticket panels, moderation, risk-based verification, bot approval, and anti-nuke recovery run in the Rust application under `src/main.rs`. The former JavaScript bootstrap and command modules have been consolidated into that runtime and removed. The unused standalone email-verification API was retired; verification is handled inside Discord.
+
+On first startup, Timi imports existing `ticket-settings.json`, `moderation-settings.json`, `verification.json`, and `recovery-backup.json` data into `data/timi.json`. Keep the original data files until you have confirmed the migrated installation is working and backed up the new `data/timi.json` file.
+
 ## Platform limits
 
 Discord does not expose IP addresses, device or browser fingerprints, VPN/proxy status or reliable cross-account identity to bots. Timi does not claim to inspect these signals.

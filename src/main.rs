@@ -872,7 +872,7 @@ async fn verify_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
     match result{
         "pass"=>{
             if settings.role_id.is_empty(){return s.edit_original(t,&format!("Your score is {points}/100, but the server owner has not configured a verified role.")).await;}
-            if let Err(e)=s.api(Method::PUT,&format!("/guilds/{g}/members/{u}/roles/{}",settings.role_id),Some(json!({"reason":format!("Timi verification passed: {points}/100")}))).await{return s.edit_original(t,&format!("Your score is {points}/100, but Timi could not assign the role: {e}")).await;}
+            if let Err(e)=s.api(Method::PUT,&format!("/guilds/{g}/members/{u}/roles/{}",settings.role_id),None).await{return s.edit_original(t,&format!("Your score is {points}/100, but Timi could not assign the role: {e}")).await;}
             let _=s.update_member(&g,&u,|r|r.last_verified=now());
             s.edit_original(t,&format!("**Verification passed — {points}/100**\nYour verified role has been assigned.")).await?;
             log_to(s,&g,&log,&format!("Verification passed for <@{u}> — **{points}/100**\n{lines}")).await;
@@ -1161,7 +1161,8 @@ async fn channel_delete(s:&Arc<State>,c:&GuildChannel)->Result<()>{
             }
             s.schedule_persist();
             let archived=s.store.lock().ok().and_then(|store|store.messages.get(&g).cloned()).unwrap_or_default();
-            let mut channel_messages=archived.into_iter().filter(|message|message["channel_id"].as_str()==Some(deleted_id)).collect::<Vec<_>>();
+            let cutoff=now()-WEEK;
+            let mut channel_messages=archived.into_iter().filter(|message|message["channel_id"].as_str()==Some(deleted_id)&&message["timestamp_ms"].as_i64().unwrap_or_default()>=cutoff).collect::<Vec<_>>();
             channel_messages.sort_by_key(|message|message["timestamp_ms"].as_i64().unwrap_or_default());
             for message in channel_messages{
                 let files=message["attachments"].as_array().cloned().unwrap_or_default();
