@@ -126,7 +126,7 @@ async function ensurePrivateTimiChannel(guild) {
 async function initializeGuild(guild) {
   try {
     // Warm the settings cache during startup/join, not on the first live message.
-    commands.get("moderationconfig")?.getSettings?.(guild);
+    commands.get("moderation-settings")?.getSettings?.(guild);
     await ensurePrivateTimiChannel(guild);
   } catch (error) {
     console.error(`Could not ensure private #timi in ${guild.name}:`, error.message);
@@ -188,7 +188,7 @@ client.on("interactionCreate", async interaction => {
     }
 
     if (interaction.customId?.startsWith("modpanel:")) {
-      const command = commands.get("moderationconfig");
+      const command = commands.get("moderation-settings");
       if (command?.handleInteraction) {
         await command.handleInteraction(interaction, client);
       }
@@ -523,7 +523,7 @@ client.on("messageCreate", async message => {
     // Cheap exits first; avoid disk access, cache scans, and content normalization for irrelevant messages.
     if (!message.guild || message.author.bot) return;
 
-    const moderation = commands.get("moderationconfig");
+    const moderation = commands.get("moderation-settings");
     if (!moderation?.getSettings) return;
 
     const member = message.member;
@@ -555,6 +555,10 @@ client.on("messageCreate", async message => {
     const content = normalizeContent(message.content || "");
     const mentionCount = message.mentions.users.size + message.mentions.roles.size;
     const linkCount = (message.content.match(/https?:\/\//gi) || []).length;
+    const inviteLink = /(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/[\w-]+/i.test(message.content);
+    const uppercaseLetters = (message.content.match(/[A-Z]/g) || []).length;
+    const letters = (message.content.match(/[A-Za-z]/g) || []).length;
+    const excessiveCaps = letters >= 12 && uppercaseLetters / letters >= 0.75;
     let reason = null;
 
     if (state.recent.length >= Math.max(2, settings.maxMessageCount)) {
@@ -570,8 +574,19 @@ client.on("messageCreate", async message => {
       }
     }
 
-    if (!reason && mentionCount >= MAX_MENTIONS_PER_MESSAGE) {
-      reason = `mention spam (${mentionCount} mentions in one message)`;
+    if (!reason && settings.blockMassMentions &&
+        (message.mentions.everyone || mentionCount >= MAX_MENTIONS_PER_MESSAGE)) {
+      reason = message.mentions.everyone
+        ? "mass mention (@everyone or @here)"
+        : `mention spam (${mentionCount} mentions in one message)`;
+    }
+
+    if (!reason && settings.blockInvites && inviteLink) {
+      reason = "unapproved Discord invite link";
+    }
+
+    if (!reason && settings.blockExcessiveCaps && excessiveCaps) {
+      reason = `excessive capital letters (${Math.round(uppercaseLetters / letters * 100)}% uppercase)`;
     }
 
     if (!reason && linkCount >= 4) {
