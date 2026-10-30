@@ -1,3 +1,16 @@
+// Ported Rust modules corresponding to the former JavaScript source files.
+mod bot_protection;
+mod index;
+mod moderation_panel;
+mod panelconfig;
+mod recovery_backup;
+mod setup;
+mod ticketpanel;
+mod verification_api;
+mod verification_system;
+mod verificationconfig;
+mod verifypanel;
+
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use chrono::{Duration as ChronoDuration, Utc};
 use regex::Regex;
