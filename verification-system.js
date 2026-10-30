@@ -97,7 +97,7 @@ async function sendSecurityAlert(client, guildId, message) {
   if (channel) await channel.send({ content: message.slice(0, 1900), allowedMentions: { parse: [] } }).catch(() => {});
 }
 function makeSessionUrl(token) {
-  const base = (process.env.BASE_URL || "").replace(/\/$/, "");
+  const base = (process.env.FRONTEND_URL || process.env.BASE_URL || "").replace(/\/$/, "");
   if (!/^https:\/\//i.test(base)) throw new Error("Set BASE_URL to the public HTTPS URL of the verification website.");
   return base + "/?session=" + encodeURIComponent(token);
 }
@@ -122,51 +122,6 @@ async function grantVerificationRole(client, session) {
   return { ok: true, roleName: role.name };
 }
 
-async function apiRequest(pathname, method = "GET", body) {
-  const base = (process.env.API_BASE_URL || "").replace(/\/$/, "");
-  const secret = process.env.BOT_API_SECRET || "";
-  if (!/^https:\/\//i.test(base) || !secret) throw new Error("Set API_BASE_URL and BOT_API_SECRET in the Termux .env file.");
-  const response = await fetch(base + pathname, {
-    method,
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + secret },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(90000)
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.message || ("Verification API returned HTTP " + response.status));
-  return result;
-}
-function startWorker(client) {
-  if (server) return;
-  console.log("Timi verification worker connected to Render API polling.");
-  let running = false;
-  const poll = async () => {
-    if (running) return;
-    running = true;
-    try {
-      const response = await apiRequest("/internal/jobs");
-      for (const job of (response.jobs || [])) {
-        let result;
-        try {
-          result = await grantVerificationRole(client, job);
-          if (result.ok) {
-            await sendSecurityAlert(client, job.guildId, "Verification completed: <@" + job.userId + "> verified their email and was granted the role.");
-          }
-        } catch (error) {
-          console.error("Verification job failed:", error.message);
-          result = { ok: false, status: 502, message: "Timi could not assign the Discord role. Please contact a server manager." };
-        }
-        try { await apiRequest("/internal/jobs/" + encodeURIComponent(job.id) + "/result", "POST", result); }
-        catch (error) { console.error("Could not submit verification result:", error.message); }
-      }
-    } catch (error) {
-      console.error("Render verification API poll failed:", error.message);
-    } finally { running = false; }
-  };
-  poll();
-  const timer = setInterval(poll, 15000);
-  timer.unref();
-}
 function startWebServer(client) {
   if (server) return;
   const port = Number(process.env.PORT || 3000);
@@ -174,21 +129,6 @@ function startWebServer(client) {
     try {
       const url = new URL(req.url, "http://localhost");
       if (req.method === "GET" && url.pathname === "/health") return json(res, 200, { ok: true, service: "timi-verification" });
-      if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/verify")) {
-        const token = url.searchParams.get("session") || "";
-        if (!/^[a-f0-9]{64}$/i.test(token)) return pageError(res, 400, "This verification link is missing or invalid.");
-        const session = sessions.get(token);
-        if (!session || session.expiresAt < Date.now() || session.used) return pageError(res, 400, "This verification link expired or was already used.");
-        const frontend = fs.readFileSync(path.join(__dirname, "public", "index.html"), "utf8");
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https:; base-uri 'none'; frame-ancestors 'none'" });
-        return res.end(frontend);
-      }
-      if (req.method === "GET" && ["/style.css", "/app.js", "/config.js"].includes(url.pathname)) {
-        const asset = fs.readFileSync(path.join(__dirname, "public", url.pathname.slice(1)));
-        const type = url.pathname.endsWith(".css") ? "text/css; charset=utf-8" : "application/javascript; charset=utf-8";
-        res.writeHead(200, { "Content-Type": type, "Content-Length": asset.length, "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff" });
-        return res.end(asset);
-      }
       const apiRoutes = ["/api/request-code", "/api/verify-code"];
       if (apiRoutes.includes(url.pathname) && req.method === "OPTIONS") {
         const origin = req.headers.origin, allowed = allowedFrontendOrigin();
@@ -265,13 +205,14 @@ async function handleInteraction(interaction) {
     await interaction.reply({ content: "Complete email verification on the private Timi website link. The configured Discord role will be assigned automatically after the code is accepted.", ephemeral: true });
     return true;
   }
+  const token = randomToken();
+  sessions.set(token, { userId: interaction.user.id, guildId: interaction.guildId, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL_MS, attempts: 0, used: false });
   let link;
-  try {
-    const created = await apiRequest("/internal/sessions", "POST", { userId: interaction.user.id, guildId: interaction.guildId });
-    link = created.url;
-  } catch (error) {
-    console.error("Could not create verification session:", error.message);
-    await interaction.reply({ content: "The verification website is temporarily unavailable. Please contact the server owner.", ephemeral: true });
+  try { link = makeSessionUrl(token); }
+  catch (error) {
+    sessions.delete(token);
+    console.error("Could not create verification session URL:", error.message);
+    await interaction.reply({ content: "The verification website URL is not configured. Please contact the server owner.", ephemeral: true });
     return true;
   }
   await interaction.reply({ content: "Open your private verification link: " + link + "\n\nEnter your email and the six-digit code on the website. Timi will assign your configured role automatically when verification succeeds. This private link expires in 30 minutes.", ephemeral: true });
@@ -285,4 +226,4 @@ function startSessionCleanup() {
   }, 60000).unref();
 }
 startSessionCleanup();
-module.exports = { startWebServer, startWorker, handleInteraction, buildPanel, getSettings, saveSettings, makeSessionUrl };
+module.exports = { startWebServer, handleInteraction, buildPanel, getSettings, saveSettings, makeSessionUrl };
