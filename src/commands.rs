@@ -24,23 +24,21 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
         }
         "moderation-settings"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to change moderation settings.",true).await;}
+            s.defer(id,t).await?;
             let mut settings=s.mods(&g);
             if !settings.panel_channel_id.is_empty()&&!settings.panel_message_id.is_empty(){
                 if s.edit(&settings.panel_channel_id,&settings.panel_message_id,
                     json!({"content":mod_text(&settings),"components":mod_components(&settings)})).await.is_ok(){
-                    return s.reply(id,t,"The existing moderation settings panel was updated.",true).await;
+                    return s.edit_original(t,"The existing moderation settings panel was updated.").await;
                 }
                 settings.panel_channel_id.clear();
                 settings.panel_message_id.clear();
             }
-            // Create one persistent panel only when no saved panel can be edited.
-            s.callback(id,t,4,Some(json!({"content":mod_text(&settings),"components":mod_components(&settings)}))).await?;
-            if let Ok(message)=s.api(Method::GET,&format!("/webhooks/{}/{}/messages/@original",s.config.client_id,t),None).await{
-                settings.panel_channel_id=message["channel_id"].as_str().unwrap_or("").to_owned();
-                settings.panel_message_id=message["id"].as_str().unwrap_or("").to_owned();
-                if !settings.panel_channel_id.is_empty()&&!settings.panel_message_id.is_empty(){s.save_mods(&g,settings)?;}
-            }
-            Ok(())
+            let message=s.send(&c,json!({"content":mod_text(&settings),"components":mod_components(&settings)})).await?;
+            settings.panel_channel_id=c.clone();
+            settings.panel_message_id=message["id"].as_str().unwrap_or("").to_owned();
+            if !settings.panel_message_id.is_empty(){s.save_mods(&g,settings)?;}
+            s.edit_original(t,"A persistent moderation settings panel was created in this channel.").await
         }
         "verify-settings"=>{
             // Acknowledge immediately so Discord does not expire the interaction
