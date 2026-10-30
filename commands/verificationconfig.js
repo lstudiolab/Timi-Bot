@@ -3,7 +3,7 @@ const verification = require("../verification-system");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("verificationconfig")
+    .setName("verify-settings")
     .setDescription("Configure Timi's risk-based verification (server owner only).")
     .addRoleOption(o => o.setName("role").setDescription("Role granted after passing").setRequired(false))
     .addRoleOption(o => o.setName("required-role").setDescription("Role a member must already have before verifying").setRequired(false))
