@@ -1,31 +1,32 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const crypto = require("node:crypto");
-const http = require("node:http");
-const nodemailer = require("nodemailer");
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const {
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder,
+  PermissionFlagsBits
+} = require("discord.js");
 
 const DATA_DIR = path.join(__dirname, "data");
 const STORE_PATH = path.join(DATA_DIR, "verification.json");
-const DEFAULTS = { roleId: "", channelId: "", panelTitle: "Verify your account", panelDescription: "Verify your email address to receive access to this server.", publishedPanels: [] };
-const CODE_TTL_MS = 10 * 60 * 1000;
-const SESSION_TTL_MS = 30 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
-const MAX_CODES_PER_IP_DAY = 20;
-const MAX_CODE_ATTEMPTS = 5;
-const sessions = new Map();
-const emailSendCooldowns = new Map();
+const DEFAULTS = {
+  roleId: "",
+  channelId: "",
+  reviewChannelId: "",
+  minAccountAgeDays: 7,
+  panelTitle: "Verify your account",
+  panelDescription: "Press Verify to have Timi assess your account and server history.",
+  publishedPanels: [],
+  pointMax: { age: 40, history: 20, attempts: 20, behavior: 10, avatar: 10 },
+  thresholds: { pass: 80, review: 60 }
+};
+const DAY = 86400000;
 let storeCache;
-let server;
-let transporter;
 
 function readStore() {
   if (storeCache) return storeCache;
-  try { storeCache = fs.existsSync(STORE_PATH) ? JSON.parse(fs.readFileSync(STORE_PATH, "utf8")) : { guilds: {}, ipActivity: {} }; }
-  catch (error) { console.error("Verification store read failed:", error.message); storeCache = { guilds: {}, ipActivity: {} }; }
-  if (!storeCache || typeof storeCache !== "object") storeCache = {};
+  try { storeCache = fs.existsSync(STORE_PATH) ? JSON.parse(fs.readFileSync(STORE_PATH, "utf8")) : { guilds: {}, members: {} }; }
+  catch (error) { console.error("Verification store read failed:", error.message); storeCache = { guilds: {}, members: {} }; }
   storeCache.guilds ||= {};
-  storeCache.ipActivity ||= {};
+  storeCache.members ||= {};
   return storeCache;
 }
 function writeStore() {
@@ -34,196 +35,171 @@ function writeStore() {
   fs.writeFileSync(tmp, JSON.stringify(readStore(), null, 2), { mode: 0o600 });
   fs.renameSync(tmp, STORE_PATH);
 }
-function getSettings(guildId) { return { ...DEFAULTS, ...(readStore().guilds[guildId] || {}) }; }
-function saveSettings(guildId, settings) { const store = readStore(); store.guilds[guildId] = { ...getSettings(guildId), ...settings }; writeStore(); }
-function randomToken(bytes = 32) { return crypto.randomBytes(bytes).toString("hex"); }
-function hashCode(value) { return crypto.createHash("sha256").update(value).digest("hex"); }
-function hashIp(ip) {
-  const secret = process.env.IP_HASH_SECRET || process.env.DISCORD_TOKEN;
-  if (!secret) throw new Error("Set IP_HASH_SECRET to enable privacy-preserving abuse tracking.");
-  return crypto.createHmac("sha256", secret).update(String(ip || "unknown")).digest("hex");
+function getSettings(guildId) {
+  const saved = readStore().guilds[guildId] || {};
+  return {
+    ...DEFAULTS, ...saved,
+    pointMax: { ...DEFAULTS.pointMax, ...(saved.pointMax || {}) },
+    thresholds: { ...DEFAULTS.thresholds, ...(saved.thresholds || {}) }
+  };
 }
-function clientIp(req) {
-  if (process.env.TRUST_PROXY === "true") {
-    const forwarded = req.headers["x-forwarded-for"];
-    if (typeof forwarded === "string" && forwarded.length < 1024) {
-      const chain = forwarded.split(",").map(value => value.trim()).filter(Boolean);
-      const candidate = chain.at(-1);
-      if (candidate && candidate.length <= 64 && /^[0-9a-fA-F:.]+$/.test(candidate)) return candidate;
-    }
+function saveSettings(guildId, settings) {
+  const store = readStore();
+  store.guilds[guildId] = { ...getSettings(guildId), ...settings };
+  writeStore();
+}
+function memberRecord(guildId, userId) {
+  const key = guildId + ":" + userId;
+  const store = readStore();
+  store.members[key] ||= { joins: 0, leaves: 0, verificationAttempts: [], failedChecks: 0, suspiciousMessages: 0, lastJoinAt: 0, lastVerifiedAt: 0 };
+  return store.members[key];
+}
+function recordJoin(member) {
+  const record = memberRecord(member.guild.id, member.id);
+  record.joins++;
+  record.lastJoinAt = Date.now();
+  writeStore();
+}
+function recordLeave(member) {
+  const record = memberRecord(member.guild.id, member.id);
+  record.leaves++;
+  writeStore();
+}
+function recordSuspiciousMessage(message, reason) {
+  if (!message.guild || message.author.bot) return;
+  const record = memberRecord(message.guild.id, message.author.id);
+  record.suspiciousMessages++;
+  record.lastSuspiciousReason = String(reason).slice(0, 180);
+  record.lastSuspiciousAt = Date.now();
+  writeStore();
+}
+function clamp(value, max) { return Math.max(0, Math.min(max, Math.round(value))); }
+function scoreAge(user, settings) {
+  const ageDays = Math.max(0, (Date.now() - user.createdTimestamp) / DAY);
+  const required = Math.max(0, Number(settings.minAccountAgeDays) || 0);
+  if (ageDays < required) return { points: 0, max: settings.pointMax.age, passed: false, reason: "Account is " + ageDays.toFixed(1) + " days old; minimum is " + required + " days.", critical: true };
+  if (required === 0) return { points: settings.pointMax.age, max: settings.pointMax.age, passed: true, reason: "No minimum account age is configured." };
+  const ratio = ageDays / required;
+  const fraction = ratio >= 4 ? 1 : ratio >= 2 ? 0.95 : ratio >= 1.5 ? 0.9 : ratio >= 1.2 ? 0.8 : 0.7;
+  return { points: clamp(settings.pointMax.age * fraction, settings.pointMax.age), max: settings.pointMax.age, passed: true, reason: "Account age: " + ageDays.toFixed(1) + " days; minimum: " + required + " days." };
+}
+function scoreHistory(record, max) {
+  const joins = Number(record.joins || 0), leaves = Number(record.leaves || 0);
+  const churn = Math.max(0, leaves - 1);
+  const penalty = Math.min(max, churn * (max * 0.2) + (record.failedChecks || 0) * (max * 0.15));
+  return { points: clamp(max - penalty, max), max, passed: penalty === 0, reason: joins + " recorded join(s), " + leaves + " leave(s), " + (record.failedChecks || 0) + " prior failed assessment(s)." };
+}
+function scoreAttempts(record, max) {
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  record.verificationAttempts = (record.verificationAttempts || []).filter(t => t >= cutoff);
+  const count = record.verificationAttempts.length;
+  const fraction = count <= 1 ? 1 : count === 2 ? 0.75 : count === 3 ? 0.45 : 0.1;
+  return { points: clamp(max * fraction, max), max, passed: count <= 1, reason: count + " verification attempt(s) in the last 10 minutes." };
+}
+function scoreBehavior(record, max) {
+  const recent = Date.now() - (record.lastSuspiciousAt || 0) < 7 * DAY;
+  const count = Number(record.suspiciousMessages || 0);
+  const fraction = count === 0 ? 1 : count === 1 ? 0.65 : count <= 3 ? 0.3 : 0;
+  return { points: clamp(max * fraction, max), max, passed: !recent && count === 0, reason: count + " suspicious message event(s) recorded." + (recent && record.lastSuspiciousReason ? " Latest: " + record.lastSuspiciousReason : "") };
+}
+function scoreAvatar(user, max) {
+  const isDefault = user.avatar == null;
+  return { points: isDefault ? clamp(max * 0.25, max) : max, max, passed: !isDefault, reason: isDefault ? "Default Discord avatar detected; this is a weak signal only." : "Custom avatar present." };
+}
+async function assessMember(member, settings) {
+  const record = memberRecord(member.guild.id, member.id);
+  record.verificationAttempts ||= [];
+  record.verificationAttempts.push(Date.now());
+  const checks = {
+    age: scoreAge(member.user, settings),
+    history: scoreHistory(record, settings.pointMax.history),
+    attempts: scoreAttempts(record, settings.pointMax.attempts),
+    behavior: scoreBehavior(record, settings.pointMax.behavior),
+    avatar: scoreAvatar(member.user, settings.pointMax.avatar)
+  };
+  const score = Object.values(checks).reduce((sum, item) => sum + item.points, 0);
+  const ageFailed = !checks.age.passed;
+  const decision = ageFailed ? "review" : score >= settings.thresholds.pass ? "pass" : score >= settings.thresholds.review ? "review" : "kick";
+  writeStore();
+  return { score, checks, decision, ageFailed };
+}
+async function getLogChannel(guild, settings) {
+  if (settings.reviewChannelId) {
+    const channel = await guild.channels.fetch(settings.reviewChannelId).catch(() => null);
+    if (channel?.isTextBased() && channel.isSendable()) return channel;
   }
-  return req.socket.remoteAddress || "unknown";
+  const fallback = guild.channels.cache.find(c => c.name === "timi" && c.isTextBased() && c.isSendable());
+  return fallback || null;
 }
-function json(res, status, body, extraHeaders = {}) {
-  const data = JSON.stringify(body);
-  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Content-Length": Buffer.byteLength(data), "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...extraHeaders });
-  res.end(data);
+function resultDescription(result) {
+  return Object.entries(result.checks).map(([key, item]) =>
+    "**" + ({ age: "Account age", history: "Server history", attempts: "Verification attempts", behavior: "Message behavior", avatar: "Avatar" }[key]) +
+    ":** " + item.points + "/" + item.max + " — " + item.reason
+  ).join("\n");
 }
-function allowedFrontendOrigin() { return (process.env.FRONTEND_ORIGIN || "").trim().replace(/\/$/, ""); }
-function apiHeaders(req) {
-  const origin = req.headers.origin;
-  const allowed = allowedFrontendOrigin();
-  const headers = { "Vary": "Origin", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Accept", "Access-Control-Max-Age": "600" };
-  if (origin && allowed && origin === allowed) headers["Access-Control-Allow-Origin"] = allowed;
-  return headers;
-}
-function apiJson(req, res, status, body) { return json(res, status, body, apiHeaders(req)); }
-function pageError(res, status, message) {
-  const safe = String(message).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  res.writeHead(status, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'" });
-  res.end("<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Timi verification</title><body style=\"font:16px -apple-system,BlinkMacSystemFont,sans-serif;background:#f5f5f7;color:#1d1d1f;padding:32px\"><main style=\"max-width:480px;margin:12vh auto;background:white;padding:28px;border-radius:24px\"><h1>Verification link unavailable</h1><p>" + safe + "</p><p>Return to Discord and press Verify to create a new link.</p></main></body></html>");
-}
-function getMailer() {
-  if (transporter) return transporter;
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !process.env.VERIFICATION_FROM) throw new Error("Email delivery is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and VERIFICATION_FROM.");
-  transporter = nodemailer.createTransport({ host: SMTP_HOST, port: Number(SMTP_PORT || 587), secure: Number(SMTP_PORT) === 465, auth: { user: SMTP_USER, pass: SMTP_PASS } });
-  return transporter;
-}
-function assessIp(ip) {
-  const store = readStore(), now = Date.now(), ipHash = hashIp(ip);
-  const record = store.ipActivity[ipHash] || { events: [], blockedUntil: 0 };
-  record.events = record.events.filter(t => now - t < DAY_MS);
-  if (record.blockedUntil > now) return { blocked: true, ipHash, count: record.events.length };
-  record.events.push(now);
-  if (record.events.length >= MAX_CODES_PER_IP_DAY) record.blockedUntil = now + 7 * DAY_MS;
-  store.ipActivity[ipHash] = record; writeStore();
-  return { blocked: record.blockedUntil > now, ipHash, count: record.events.length };
-}
-async function sendSecurityAlert(client, guildId, message) {
-  const guild = client.guilds.cache.get(guildId);
-  if (!guild) return;
-  const channel = guild.channels.cache.find(c => c.name === "timi" && c.isTextBased() && c.isSendable());
-  if (channel) await channel.send({ content: message.slice(0, 1900), allowedMentions: { parse: [] } }).catch(() => {});
-}
-function makeSessionUrl(token) {
-  const base = (process.env.FRONTEND_URL || process.env.BASE_URL || "").replace(/\/$/, "");
-  if (!/^https:\/\//i.test(base)) throw new Error("Set FRONTEND_URL to the public HTTPS URL of the Render verification website.");
-  return base + "/?session=" + encodeURIComponent(token);
-}
-function parseBody(req, raw) {
-  if ((req.headers["content-type"] || "").includes("application/json")) {
-    try { return JSON.parse(raw); } catch { return null; }
+async function handleInteraction(interaction) {
+  if (!interaction.customId?.startsWith("verify:")) return false;
+  if (!interaction.inGuild() || !interaction.isButton()) {
+    await interaction.reply({ content: "Verification can only be used in a server.", ephemeral: true });
+    return true;
   }
-  return Object.fromEntries(new URLSearchParams(raw));
-}
-async function grantVerificationRole(client, session) {
-  const guild = await client.guilds.fetch(session.guildId).catch(() => null);
-  if (!guild) return { ok: false, status: 404, message: "The Discord server could not be found. Return to Discord and start verification again." };
-  const settings = getSettings(session.guildId);
-  if (!settings.roleId) return { ok: false, status: 409, message: "Email verified, but the server owner has not configured a verification role yet." };
-  const role = await guild.roles.fetch(settings.roleId).catch(() => null);
-  const member = await guild.members.fetch(session.userId).catch(() => null);
-  if (!role || !member) return { ok: false, status: 404, message: "Your Discord membership or the configured role could not be found. Make sure you have not left the server." };
-  const botMember = guild.members.me || await guild.members.fetch(client.user.id).catch(() => null);
-  if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ManageRoles) || !role.editable) return { ok: false, status: 403, message: "Timi cannot assign this role. The server owner must grant Manage Roles and move Timi's highest role above the verification role." };
-  try { if (!member.roles.cache.has(role.id)) await member.roles.add(role, "Timi website email verification completed"); }
-  catch (error) { console.error("Could not grant verification role:", error.message); return { ok: false, status: 502, message: "Your email was verified, but Discord rejected the role assignment. Contact a server manager." }; }
-  return { ok: true, roleName: role.name };
-}
-
-function startWebServer(client) {
-  if (server) return;
-  const port = Number(process.env.PORT || 3000);
-  server = http.createServer(async (req, res) => {
-    try {
-      const url = new URL(req.url, "http://localhost");
-      if (req.method === "GET" && url.pathname === "/health") return json(res, 200, { ok: true, service: "timi-verification" });
-      const apiRoutes = ["/api/request-code", "/api/verify-code"];
-      if (apiRoutes.includes(url.pathname) && req.method === "OPTIONS") {
-        const origin = req.headers.origin, allowed = allowedFrontendOrigin();
-        if (!origin || !allowed || origin !== allowed) return json(res, 403, { ok: false, message: "Origin not allowed" });
-        res.writeHead(204, apiHeaders(req)); return res.end();
-      }
-      if (apiRoutes.includes(url.pathname) && req.method === "POST") {
-        const origin = req.headers.origin, allowed = allowedFrontendOrigin();
-        if (origin && (!allowed || origin !== allowed)) return apiJson(req, res, 403, { ok: false, message: "This website is not allowed to use the verification API." });
-        let raw = "";
-        for await (const chunk of req) { raw += chunk; if (raw.length > 8192) return apiJson(req, res, 413, { ok: false, message: "Request too large." }); }
-        const payload = parseBody(req, raw);
-        if (!payload || typeof payload !== "object") return apiJson(req, res, 400, { ok: false, message: "Invalid request body." });
-        const token = typeof payload.session === "string" ? payload.session : "";
-        const session = sessions.get(token);
-        if (!/^[a-f0-9]{64}$/i.test(token) || !session || session.expiresAt < Date.now() || session.used) return apiJson(req, res, 400, { ok: false, message: "This verification link is invalid, expired, or already used. Return to Discord and press Verify again." });
-        if (url.pathname === "/api/request-code") {
-          const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
-          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return apiJson(req, res, 400, { ok: false, message: "Enter a valid email address." });
-          let assessment;
-          try { assessment = assessIp(clientIp(req)); } catch (error) { console.error("IP abuse tracking is not configured:", error.message); return apiJson(req, res, 503, { ok: false, message: "Verification is temporarily unavailable. Contact the server owner." }); }
-          if (assessment.blocked) {
-            await sendSecurityAlert(client, session.guildId, "Verification security: network hash " + assessment.ipHash.slice(0, 12) + " blocked for 7 days after " + assessment.count + " requests in 24 hours.");
-            return apiJson(req, res, 429, { ok: false, message: "Too many verification requests from this network. Try again later." });
-          }
-          if (emailSendCooldowns.has(email) && Date.now() - emailSendCooldowns.get(email) < 60000) return apiJson(req, res, 429, { ok: false, message: "Wait 60 seconds before requesting another code for this email." });
-          const code = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
-          session.email = email; session.codeHash = hashCode(token + ":" + code); session.codeExpiresAt = Date.now() + CODE_TTL_MS; session.attempts = 0; session.ipHash = assessment.ipHash;
-          emailSendCooldowns.set(email, Date.now());
-          try {
-            await getMailer().sendMail({
-              from: process.env.VERIFICATION_FROM, to: email, subject: "Your Timi verification code",
-              text: "Your Timi verification code is " + code + ". It expires in 10 minutes. If you did not request this, ignore this email.",
-              html: "<div style=\"font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif;max-width:480px;margin:auto;padding:24px;color:#1d1d1f\"><h2>Timi verification</h2><p>Your one-time code is:</p><p style=\"font-size:32px;letter-spacing:8px;font-weight:700\">" + code + "</p><p>This code expires in 10 minutes. If you did not request it, ignore this message.</p></div>"
-            });
-          } catch (error) {
-            console.error("Verification email delivery failed:", error.message); emailSendCooldowns.delete(email);
-            return apiJson(req, res, 503, { ok: false, message: "Email could not be sent. Try again later or contact the server owner." });
-          }
-          return apiJson(req, res, 200, { ok: true, message: "Check your inbox for the six-digit code. It expires in 10 minutes." });
-        }
-        const code = typeof payload.code === "string" ? payload.code.trim() : "";
-        if (!session.email || !session.codeHash) return apiJson(req, res, 400, { ok: false, message: "Request a verification code first." });
-        if (Date.now() > session.codeExpiresAt) return apiJson(req, res, 400, { ok: false, message: "That code expired. Request a new one." });
-        session.attempts = (session.attempts || 0) + 1;
-        if (session.attempts > MAX_CODE_ATTEMPTS) { session.used = true; return apiJson(req, res, 429, { ok: false, message: "Too many incorrect attempts. Return to Discord and start again." }); }
-        if (!/^\d{6}$/.test(code) || hashCode(token + ":" + code) !== session.codeHash) {
-          if (session.attempts >= 3) await sendSecurityAlert(client, session.guildId, "Verification alert: <@" + session.userId + "> has " + session.attempts + " failed website code attempts.");
-          return apiJson(req, res, 400, { ok: false, message: "That code is incorrect. Check your email and try again." });
-        }
-        const result = await grantVerificationRole(client, session);
-        if (!result.ok) return apiJson(req, res, result.status, result);
-        session.codeHash = null; session.used = true; session.verifiedAt = Date.now();
-        await sendSecurityAlert(client, session.guildId, "Verification completed: <@" + session.userId + "> verified their email and was granted the configured role.");
-        return apiJson(req, res, 200, { ok: true, message: "Email verified. The Discord role \"" + result.roleName + "\" has been assigned to your account. You can return to Discord." });
-      }
-      return json(res, 404, { ok: false, message: "Not found" });
-    } catch (error) {
-      console.error("Verification web request failed:", error.message);
-      if (!res.headersSent) json(res, 500, { ok: false, message: "Internal server error" }); else res.end();
+  if (interaction.customId !== "verify:start") return true;
+  await interaction.deferReply({ ephemeral: true });
+  const settings = getSettings(interaction.guildId);
+  const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+  if (!member) {
+    await interaction.editReply("Timi could not retrieve your server membership. Please try again.");
+    return true;
+  }
+  if (settings.roleId && member.roles.cache.has(settings.roleId)) {
+    await interaction.editReply("You are already verified.");
+    return true;
+  }
+  const result = await assessMember(member, settings);
+  const summary = resultDescription(result);
+  if (result.decision === "pass") {
+    if (!settings.roleId) {
+      await interaction.editReply("Your score is " + result.score + "/100, but the server owner has not configured a verification role.");
+      return true;
     }
-  });
-  server.listen(port, "0.0.0.0", () => console.log("Timi backend API listening on port " + port));
+    const role = await interaction.guild.roles.fetch(settings.roleId).catch(() => null);
+    const botMember = interaction.guild.members.me || await interaction.guild.members.fetch(interaction.client.user.id);
+    if (!role || !botMember.permissions.has(PermissionFlagsBits.ManageRoles) || !role.editable) {
+      await interaction.editReply("Your score is " + result.score + "/100, but Timi cannot assign the configured role. The owner must check Manage Roles and role hierarchy.");
+      return true;
+    }
+    await member.roles.add(role, "Timi risk-based verification passed: " + result.score + "/100");
+    const record = memberRecord(interaction.guildId, member.id);
+    record.lastVerifiedAt = Date.now();
+    writeStore();
+    await interaction.editReply("**Verification passed — " + result.score + "/100**\nYour verified role has been assigned.");
+    const log = await getLogChannel(interaction.guild, settings);
+    if (log) await log.send({ content: "Verification passed for <@" + member.id + "> — **" + result.score + "/100**\n" + summary, allowedMentions: { parse: [] } }).catch(() => {});
+  } else if (result.decision === "review") {
+    await interaction.editReply("**Manual review required — " + result.score + "/100**\n" + (result.ageFailed ? "Your account does not meet the server's minimum account-age requirement. " : "") + "A moderator must review your verification.");
+    const log = await getLogChannel(interaction.guild, settings);
+    if (log) await log.send({ content: "**Verification requires manual review**\nMember: <@" + member.id + ">\nScore: **" + result.score + "/100**\n" + summary, allowedMentions: { parse: [] } }).catch(() => {});
+  } else {
+    const reason = "Timi verification score " + result.score + "/100, below the required 60. " +
+      Object.entries(result.checks).filter(([, item]) => item.points < item.max).map(([key, item]) => key + ": " + item.reason).join(" ");
+    const botMember = interaction.guild.members.me;
+    if (!botMember?.permissions.has(PermissionFlagsBits.KickMembers) || !member.kickable) {
+      await interaction.editReply("**Verification failed — " + result.score + "/100**\nTimi cannot kick you because of missing Kick Members permission or role hierarchy. A moderator has been notified.");
+    } else {
+      await interaction.editReply("**Verification failed — " + result.score + "/100**\nYou will be removed from the server. Reason: Your account did not meet the server's verification risk threshold.");
+      await member.kick(reason);
+    }
+    const log = await getLogChannel(interaction.guild, settings);
+    if (log) await log.send({ content: "**Verification failed; kick attempted**\nMember: <@" + member.id + ">\nScore: **" + result.score + "/100**\nReason: " + reason + "\n" + summary, allowedMentions: { parse: [] } }).catch(() => {});
+    const record = memberRecord(interaction.guildId, member.id);
+    record.failedChecks = (record.failedChecks || 0) + 1;
+    writeStore();
+  }
+  return true;
 }
 function buildPanel(settings) {
   const embed = new EmbedBuilder().setColor(0x808080).setTitle(settings.panelTitle).setDescription(settings.panelDescription);
   const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("verify:start").setLabel("Verify").setStyle(ButtonStyle.Primary));
   return { embeds: [embed], components: [row] };
 }
-async function handleInteraction(interaction) {
-  if (!interaction.customId?.startsWith("verify:")) return false;
-  if (!interaction.inGuild()) { await interaction.reply({ content: "Verification can only be used in a server.", ephemeral: true }); return true; }
-  if (interaction.customId !== "verify:start") {
-    await interaction.reply({ content: "Complete email verification on the private Timi website link. The configured Discord role will be assigned automatically after the code is accepted.", ephemeral: true });
-    return true;
-  }
-  const token = randomToken();
-  sessions.set(token, { userId: interaction.user.id, guildId: interaction.guildId, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL_MS, attempts: 0, used: false });
-  let link;
-  try { link = makeSessionUrl(token); }
-  catch (error) {
-    sessions.delete(token);
-    console.error("Could not create verification session URL:", error.message);
-    await interaction.reply({ content: "The verification website URL is not configured. Please contact the server owner.", ephemeral: true });
-    return true;
-  }
-  await interaction.reply({ content: "Open your private verification link: " + link + "\n\nEnter your email and the six-digit code on the website. Timi will assign your configured role automatically when verification succeeds. This private link expires in 30 minutes.", ephemeral: true });
-  return true;
-}
-function startSessionCleanup() {
-  setInterval(() => {
-    const now = Date.now();
-    for (const [token, session] of sessions) if (session.expiresAt < now) sessions.delete(token);
-    for (const [email, timestamp] of emailSendCooldowns) if (now - timestamp > 5 * 60000) emailSendCooldowns.delete(email);
-  }, 60000).unref();
-}
-startSessionCleanup();
-module.exports = { startWebServer, handleInteraction, buildPanel, getSettings, saveSettings, makeSessionUrl };
+module.exports = { handleInteraction, buildPanel, getSettings, saveSettings, recordJoin, recordLeave, recordSuspiciousMessage };
