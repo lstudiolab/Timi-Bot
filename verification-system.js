@@ -98,7 +98,7 @@ async function sendSecurityAlert(client, guildId, message) {
 }
 function makeSessionUrl(token) {
   const base = (process.env.FRONTEND_URL || process.env.BASE_URL || "").replace(/\/$/, "");
-  if (!/^https:\/\//i.test(base)) throw new Error("Set BASE_URL to the public HTTPS URL of the verification website.");
+  if (!/^https:\/\//i.test(base)) throw new Error("Set FRONTEND_URL to the public HTTPS URL of the Render verification website.");
   return base + "/?session=" + encodeURIComponent(token);
 }
 function parseBody(req, raw) {
@@ -191,7 +191,7 @@ function startWebServer(client) {
       if (!res.headersSent) json(res, 500, { ok: false, message: "Internal server error" }); else res.end();
     }
   });
-  server.listen(port, "0.0.0.0", () => console.log("Timi verification website listening on port " + port));
+  server.listen(port, "0.0.0.0", () => console.log("Timi backend API listening on port " + port));
 }
 function buildPanel(settings) {
   const embed = new EmbedBuilder().setColor(0x808080).setTitle(settings.panelTitle).setDescription(settings.panelDescription);
