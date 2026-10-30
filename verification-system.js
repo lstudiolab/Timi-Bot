@@ -9,6 +9,7 @@ const DATA_DIR = path.join(__dirname, "data");
 const STORE_PATH = path.join(DATA_DIR, "verification.json");
 const DEFAULTS = {
   roleId: "",
+  requiredRoleId: "",
   channelId: "",
   reviewChannelId: "",
   minAccountAgeDays: 7,
@@ -175,6 +176,17 @@ async function handleInteraction(interaction) {
   if (settings.roleId && member.roles.cache.has(settings.roleId)) {
     await interaction.editReply("You are already verified.");
     return true;
+  }
+  if (settings.requiredRoleId) {
+    const requiredRole = await interaction.guild.roles.fetch(settings.requiredRoleId).catch(() => null);
+    if (!requiredRole) {
+      await interaction.editReply("The server's configured required role no longer exists. Ask the server owner to update /verificationconfig.");
+      return true;
+    }
+    if (!member.roles.cache.has(requiredRole.id)) {
+      await interaction.editReply("You cannot start verification yet. You must first have the **" + requiredRole.name + "** role. Contact a moderator if you believe this is incorrect.");
+      return true;
+    }
   }
   const result = await assessMember(member, settings, status =>
     interaction.editReply("**Timi verification in progress**\n" + status)
