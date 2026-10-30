@@ -46,7 +46,7 @@ function sessionFor(token) {
 function mailer() {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, VERIFICATION_FROM } = process.env;
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS || !VERIFICATION_FROM) throw new Error("Email delivery is not configured.");
-  return nodemailer.createTransport({ host: SMTP_HOST, port: Number(SMTP_PORT || 587), secure: Number(SMTP_PORT) === 465, auth: { user: SMTP_USER, pass: SMTP_PASS } });
+  return nodemailer.createTransport({ host: SMTP_HOST, port: Number(SMTP_PORT || 587), secure: Number(SMTP_PORT) === 465, auth: { user: SMTP_USER, pass: SMTP_PASS }, pool: true, maxConnections: 2, maxMessages: 100, connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000 });
 }
 function htmlError(message) {
   const safe = String(message).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
