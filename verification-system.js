@@ -177,7 +177,7 @@ async function handleInteraction(interaction) {
     return true;
   }
   const result = await assessMember(member, settings, status =>
-    interaction.editReply("**Timi verification in progress**\\n" + status)
+    interaction.editReply("**Timi verification in progress**\n" + status)
   );
   const summary = resultDescription(result);
   if (result.decision === "pass") {
