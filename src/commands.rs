@@ -98,13 +98,15 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             Ok(())
         }
         "setup-role-picker"=>{
-            s.defer(id,t).await?;
-            let server=match s.api(Method::GET,&format!("/guilds/{g}"),None).await{
-                Ok(value)=>value,
-                Err(error)=>{let _=s.edit_original(t,"Timi could not check server ownership. Please try again.").await;return Err(error);}
-            };
-            if server["owner_id"].as_str()!=Some(&u){return s.edit_original(t,"Only the server owner can create role picker menus.").await;}
-            s.edit_original_with_components(t,"**Role picker setup**\n\nCreate a self-service role menu. You can publish multiple menus in different channels. Configure its appearance, choose the allowed roles, then publish.",vec![row(vec![button("rolepicker:start","Configure role picker",1)])]).await
+            // Open the configuration form immediately. Ownership is checked when
+            // the modal is submitted, keeping the initial interaction instant.
+            s.callback(id,t,9,Some(modal("rolepicker:details","Role picker settings",vec![
+                input("rp-title","Menu title","└ notifications",false,100),
+                input("rp-description","Description","choose what you want to be pinged for.",true,500),
+                input("rp-placeholder","Dropdown placeholder","select...",false,150),
+                optional_input("rp-footer","Bottom button text","Done reading? Check out #chat.",false,80),
+                optional_input("rp-footer-channel","Bottom button channel ID (blank = this channel)","",false,22)
+            ]))).await
         }
         "verify-panel"=>{
             let server=s.api(Method::GET,&format!("/guilds/{g}"),None).await?;
