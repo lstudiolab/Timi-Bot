@@ -21,22 +21,28 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
         }
         "moderation-settings"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to change moderation settings.",true).await;}
+            // The panel lookup/edit and fallback publication both call Discord's
+            // REST API. Acknowledge first so those requests cannot expire the
+            // three-second interaction response window.
+            s.defer(id,t).await?;
             let mut settings=s.mods(&g);
             if !settings.panel_channel_id.is_empty()&&!settings.panel_message_id.is_empty(){
                 if s.edit(&settings.panel_channel_id,&settings.panel_message_id,
                     json!({"content":mod_text(&settings),"components":mod_components(&settings)})).await.is_ok(){
-                    return s.reply(id,t,"The existing moderation settings panel was updated.",true).await;
+                    return s.edit_original(t,"The existing moderation settings panel was updated.").await;
                 }
+                warn!("Saved moderation settings panel could not be edited; publishing a replacement for guild {g}.");
                 settings.panel_channel_id.clear();
                 settings.panel_message_id.clear();
             }
             // Create one persistent panel only when no saved panel can be edited.
-            s.callback(id,t,4,Some(json!({"content":mod_text(&settings),"components":mod_components(&settings)}))).await?;
+            s.edit_original_with_components(t,&mod_text(&settings),mod_components(&settings)).await?;
             if let Ok(message)=s.api(Method::GET,&format!("/webhooks/{}/{}/messages/@original",s.config.client_id,t),None).await{
                 settings.panel_channel_id=message["channel_id"].as_str().unwrap_or("").to_owned();
                 settings.panel_message_id=message["id"].as_str().unwrap_or("").to_owned();
                 if !settings.panel_channel_id.is_empty()&&!settings.panel_message_id.is_empty(){s.save_mods(&g,settings)?;}
-            }
+                else{warn!("Could not capture the moderation panel message IDs for guild {g}; panel may not persist across invocations.");}
+            }else{warn!("Could not fetch the newly published moderation panel for guild {g}; panel may not persist across invocations.");}
             Ok(())
         }
         "verify-settings"=>{

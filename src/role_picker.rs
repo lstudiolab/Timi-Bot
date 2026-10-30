@@ -12,50 +12,11 @@ fn role_picker_public_payload(menu:&RolePickerMenu)->Value{
         "min_values":0,"max_values":max,"options":options});
     let mut components=vec![row(vec![select])];
     if !menu.footer_text.trim().is_empty()&&!menu.footer_channel_id.is_empty(){
-        components.push(row(vec![json!({"type":2,"style":5,
-            "label":menu.footer_text.chars().take(80).collect::<String>(),
-            "emoji":{"name":"➡️"},
+        components.push(row(vec![json!({"type":2,"style":5,"label":menu.footer_text.chars().take(80).collect::<String>(),
             "url":format!("https://discord.com/channels/{}/{}",menu.guild_id,menu.footer_channel_id)})]));
     }
     json!({"embeds":[{"color":8421504,"title":menu.title,"description":menu.description}],
         "components":components,"allowed_mentions":{"parse":[]}})
-}
-async fn validate_role_picker_roles(s:&State,g:&str,ids:&[String])->std::result::Result<Vec<RolePickerRole>,String>{
-    let list=s.api(Method::GET,&format!("/guilds/{g}/roles"),None).await
-        .map_err(|_|"Timi could not read the server roles. Check its permissions.".to_owned())?;
-    let all=list.as_array().ok_or_else(||"Timi could not read the server roles.".to_owned())?;
-    let me=s.api(Method::GET,"/users/@me",None).await
-        .map_err(|_|"Timi could not read its bot account.".to_owned())?;
-    let bot_id=me["id"].as_str().ok_or_else(||"Timi could not read its bot account ID.".to_owned())?;
-    let member=s.api(Method::GET,&format!("/guilds/{g}/members/{bot_id}"),None).await
-        .map_err(|_|"Timi could not read its server member roles.".to_owned())?;
-    let bot_roles=member["roles"].as_array().cloned().unwrap_or_default();
-    let mut bot_permissions=0u64;
-    let mut bot_top=0i64;
-    for role in all{
-        let id=role["id"].as_str().unwrap_or("");
-        if id==g||bot_roles.iter().any(|value|value.as_str()==Some(id)){
-            bot_permissions|=role["permissions"].as_str().and_then(|v|v.parse::<u64>().ok()).unwrap_or(0);
-            bot_top=bot_top.max(role["position"].as_i64().unwrap_or(0));
-        }
-    }
-    if bot_permissions&(8|MANAGE_ROLES)==0{
-        return Err("Timi needs Manage Roles permission to assign roles.".into());
-    }
-    let mut result=Vec::new();
-    for id in ids{
-        if !snowflake(id)||id==g{return Err("Choose valid server roles other than @everyone.".into());}
-        let target=all.iter().find(|r|r["id"].as_str()==Some(id))
-            .ok_or_else(||"One of the selected roles no longer exists.".to_owned())?;
-        if target["managed"].as_bool().unwrap_or(false){
-            return Err("Managed integration roles cannot be included in a role picker.".into());
-        }
-        if target["position"].as_i64().unwrap_or(0)>=bot_top{
-            return Err(format!("Move Timi's highest role above **{}**, then publish again.",target["name"].as_str().unwrap_or("the selected role")));
-        }
-        result.push(RolePickerRole{id:id.clone(),name:target["name"].as_str().unwrap_or("Role").to_owned()});
-    }
-    Ok(result)
 }
 async fn role_picker_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Result<()>{
     let g=guild_id(v);let u=user_id(v);let channel=channel_id(v);
@@ -63,11 +24,11 @@ async fn role_picker_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str
         let server=s.api(Method::GET,&format!("/guilds/{g}"),None).await?;
         if server["owner_id"].as_str()!=Some(&u){return s.reply(id,t,"Only the server owner can configure role picker menus.",true).await;}
         return s.callback(id,t,9,Some(modal("rolepicker:details","Role picker settings",vec![
-            input("rp-title","Menu title","└ notifications",false,100),
+            input("rp-title","Menu title","notifications",false,100),
             input("rp-description","Description","choose what you want to be pinged for.",true,500),
             input("rp-placeholder","Dropdown placeholder","select...",false,150),
             optional_input("rp-footer","Bottom button text","Done reading? Check out #chat.",false,80),
-            optional_input("rp-footer-channel","Bottom button channel ID (blank = this channel)","",false,22)
+            optional_input("rp-footer-channel","Bottom button channel ID (optional)","",false,22)
         ]))).await;
     }
     if let Some(draft_id)=custom.strip_prefix("rolepicker:setup-roles:"){
@@ -83,10 +44,16 @@ async fn role_picker_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str
         let draft=match s.role_picker_draft(draft_id){Some(d)=>d,None=>return s.reply(id,t,"This setup has expired. Run /setup-role-picker again.",true).await};
         if draft.guild_id!=g||draft.roles.is_empty(){return s.reply(id,t,"Choose at least one role before publishing.",true).await;}
         s.defer(id,t).await?;
-        let roles=match validate_role_picker_roles(s,&g,&draft.roles).await{
-            Ok(roles)=>roles,
-            Err(reason)=>return s.edit_original(t,&reason).await
-        };
+        let list=s.api(Method::GET,&format!("/guilds/{g}/roles"),None).await?;
+        let all=list.as_array().cloned().unwrap_or_default();
+        let mut roles=Vec::new();
+        for role_id in &draft.roles{
+            let role=match all.iter().find(|r|r["id"].as_str()==Some(role_id)){
+                Some(r)=>r,None=>return s.edit_original(t,"One of the selected roles no longer exists. Reopen setup and select the roles again.").await
+            };
+            if let Err(reason)=validate_verification_role(s,&g,role_id,true).await{return s.edit_original(t,&reason).await;}
+            roles.push(RolePickerRole{id:role_id.clone(),name:role["name"].as_str().unwrap_or("Role").to_owned()});
+        }
         let menu_id=format!("{}-{}",now(),id);
         let mut menu=RolePickerMenu{id:menu_id.clone(),guild_id:g.clone(),channel_id:draft.channel_id.clone(),
             title:draft.title,description:draft.description,placeholder:draft.placeholder,
@@ -102,50 +69,37 @@ async fn role_picker_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str
         let mut menu=match s.role_picker_menu(menu_id){Some(m)=>m,None=>return s.reply(id,t,"This role picker is no longer available.",true).await};
         if menu.guild_id!=g{return s.reply(id,t,"This role picker belongs to another server.",true).await;}
         let selected=v.pointer("/data/values").and_then(Value::as_array).map(|a|a.iter().filter_map(Value::as_str).map(str::to_owned).collect::<Vec<_>>()).unwrap_or_default();
-        if selected.len()>menu.roles.len()||selected.iter().any(|id|!menu.roles.iter().any(|r|&r.id==id)){
-            return s.reply(id,t,"That selection contains a role not offered by this menu.",true).await;
-        }
-        // Acknowledge before making role API calls; larger menus can require
-        // several requests and must not exceed Discord's interaction deadline.
-        s.defer(id,t).await?;
         let previous=menu.selections.get(&u).cloned().unwrap_or_default();
         let add=selected.iter().filter(|r|!previous.contains(r)).cloned().collect::<Vec<_>>();
         let remove=previous.iter().filter(|r|!selected.contains(r)).cloned().collect::<Vec<_>>();
         for role in &add{
             if let Err(error)=s.api(Method::PUT,&format!("/guilds/{g}/members/{u}/roles/{role}"),None).await{
-                return s.edit_original(t,&format!("Timi could not assign a selected role. Check Manage Roles and role hierarchy. {error}")).await;
+                return s.reply(id,t,&format!("Timi could not assign a selected role. Check Manage Roles and role hierarchy. {error}"),true).await;
             }
         }
         for role in &remove{
             if let Err(error)=s.api(Method::DELETE,&format!("/guilds/{g}/members/{u}/roles/{role}"),None).await{
-                return s.edit_original(t,&format!("Timi could not remove a deselected role. Check Manage Roles and role hierarchy. {error}")).await;
+                return s.reply(id,t,&format!("Timi could not remove a deselected role. Check Manage Roles and role hierarchy. {error}"),true).await;
             }
         }
         menu.selections.insert(u,selected.clone());
         s.save_role_picker_menu(menu)?;
-        return s.edit_original(t,if selected.is_empty(){"Your role selections have been cleared."}else{"Your role selections have been updated."}).await;
+        return s.reply(id,t,if selected.is_empty(){"Your role selections have been cleared."}else{"Your role selections have been updated."},true).await;
     }
     Ok(())
 }
 async fn role_picker_modal_submit(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str,fields:&HashMap<String,String>)->Result<()>{
     if custom!="rolepicker:details"{return Ok(());}
     let g=guild_id(v);let u=user_id(v);let channel=channel_id(v);
-    // Defer immediately; role and channel lookups happen after acknowledgement.
-    s.defer(id,t).await?;
     let server=s.api(Method::GET,&format!("/guilds/{g}"),None).await?;
-    if server["owner_id"].as_str()!=Some(&u){return s.edit_original(t,"Only the server owner can configure role picker menus.").await;}
+    if server["owner_id"].as_str()!=Some(&u){return s.reply(id,t,"Only the server owner can configure role picker menus.",true).await;}
     let title=fields.get("rp-title").cloned().unwrap_or_default().trim().to_owned();
     let description=fields.get("rp-description").cloned().unwrap_or_default().trim().to_owned();
     let placeholder=fields.get("rp-placeholder").cloned().unwrap_or_default().trim().to_owned();
     let footer_text=fields.get("rp-footer").cloned().unwrap_or_default().trim().to_owned();
     let footer_channel_id=fields.get("rp-footer-channel").cloned().unwrap_or_default().trim().to_owned();
     if title.is_empty()||description.is_empty()||placeholder.is_empty(){return s.reply(id,t,"Menu title, description, and placeholder are required.",true).await;}
-    let footer_channel_id=if footer_channel_id.is_empty(){channel.clone()}else{footer_channel_id};
-    if !snowflake(&footer_channel_id){return s.edit_original(t,"The bottom button channel must be a valid channel ID.").await;}
-    let footer_channel=s.api(Method::GET,&format!("/channels/{footer_channel_id}"),None).await?;
-    if footer_channel["guild_id"].as_str()!=Some(&g)||!matches!(footer_channel["type"].as_u64(),Some(0)|Some(5)){
-        return s.edit_original(t,"Choose a text channel from this server for the bottom button.").await;
-    }
+    if !footer_channel_id.is_empty()&&!snowflake(&footer_channel_id){return s.reply(id,t,"The bottom button channel must be a valid channel ID.",true).await;}
     let draft_id=format!("{}-{}",g,id);
     let draft=RolePickerDraft{guild_id:g.clone(),channel_id:channel,title,description,placeholder,footer_text,footer_channel_id,roles:Vec::new()};
     s.save_role_picker_draft(&draft_id,draft.clone())?;
@@ -153,5 +107,5 @@ async fn role_picker_modal_submit(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&
     let count=roles.as_array().map(|a|a.iter().filter(|r|r["id"].as_str()!=Some(&draft.guild_id)&&!r["managed"].as_bool().unwrap_or(false)).count()).unwrap_or(0);
     let select=json!({"type":6,"custom_id":format!("rolepicker:setup-roles:{draft_id}"),
         "placeholder":"Choose the roles members can pick","min_values":1,"max_values":25});
-    s.edit_original_with_components(t,&format!("**{}**\n{}\n\nChoose which roles members can select. {} assignable roles were found. Select up to 25, then publish.",draft.title,draft.description,count),vec![row(vec![select])]).await
+    s.callback(id,t,4,Some(json!({"content":format!("**{}**\n{}\n\nChoose which roles members can select. {} assignable roles were found. Select up to 25.",draft.title,draft.description,count),"components":[row(vec![select])],"flags":64}))).await
 }
