@@ -19,10 +19,17 @@ fn score(s:&State,g:&str,u:&str,user:&Value,settings:&VerifySettings)->(u32,Valu
     let _=s.update_member(g,u,|m|{m.attempts.retain(|t|timestamp-*t<=600_000);m.attempts.push(timestamp);});
     (total,details,critical)
 }
+fn has_verified(record:&MemberRecord)->bool{record.last_verified>0}
+
 async fn verify_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Result<()>{
     if custom!="verify:start"{return Ok(());}
     let g=guild_id(v);let u=user_id(v);s.defer(id,t).await?;
-    let settings=s.verify(&g);let m=s.api(Method::GET,&format!("/guilds/{g}/members/{u}"),None).await?;
+    let settings=s.verify(&g);
+    // A successful verification is permanent for this member in this server, even if the role is later removed.
+    if has_verified(&s.member(&g,&u)){
+        return s.edit_original(t,"You have already completed verification. Each member can verify only once in this server.").await;
+    }
+    let m=s.api(Method::GET,&format!("/guilds/{g}/members/{u}"),None).await?;
     let roles=m["roles"].as_array().cloned().unwrap_or_default();
     if !settings.role_id.is_empty()&&roles.iter().any(|r|r.as_str()==Some(&settings.role_id)){return s.edit_original(t,"You are already verified.").await;}
     if !settings.required_role_id.is_empty()&&!roles.iter().any(|r|r.as_str()==Some(&settings.required_role_id)){return s.edit_original(t,"You cannot start verification yet. You must first have the configured required role.").await;}
