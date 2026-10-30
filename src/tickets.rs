@@ -208,6 +208,8 @@ async fn modal_submit(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
     }
     if custom.starts_with("modpanel:"){
         if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to edit moderation settings.",true).await;}
+        // Modal submissions have their own three-second acknowledgement deadline.
+        s.defer(id,t).await?;
         let mut x=s.mods(&g);
         match custom{
             "modpanel:sanction-modal"=>{
@@ -224,7 +226,7 @@ async fn modal_submit(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             _=>return Ok(())
         }
         s.save_mods(&g,x.clone())?;
-        return reply_update(s,id,t,&mod_text(&x),mod_components(&x)).await;
+        return s.edit_original_with_components(t,&mod_text(&x),mod_components(&x)).await;
     }
     Ok(())
 }

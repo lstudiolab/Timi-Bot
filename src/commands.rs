@@ -21,28 +21,22 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
         }
         "moderation-settings"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to change moderation settings.",true).await;}
-            // The panel lookup/edit and fallback publication both call Discord's
-            // REST API. Acknowledge first so those requests cannot expire the
-            // three-second interaction response window.
-            s.defer(id,t).await?;
             let mut settings=s.mods(&g);
             if !settings.panel_channel_id.is_empty()&&!settings.panel_message_id.is_empty(){
                 if s.edit(&settings.panel_channel_id,&settings.panel_message_id,
                     json!({"content":mod_text(&settings),"components":mod_components(&settings)})).await.is_ok(){
-                    return s.edit_original(t,"The existing moderation settings panel was updated.").await;
+                    return s.reply(id,t,"The existing moderation settings panel was updated.",true).await;
                 }
-                warn!("Saved moderation settings panel could not be edited; publishing a replacement for guild {g}.");
                 settings.panel_channel_id.clear();
                 settings.panel_message_id.clear();
             }
             // Create one persistent panel only when no saved panel can be edited.
-            s.edit_original_with_components(t,&mod_text(&settings),mod_components(&settings)).await?;
+            s.callback(id,t,4,Some(json!({"content":mod_text(&settings),"components":mod_components(&settings)}))).await?;
             if let Ok(message)=s.api(Method::GET,&format!("/webhooks/{}/{}/messages/@original",s.config.client_id,t),None).await{
                 settings.panel_channel_id=message["channel_id"].as_str().unwrap_or("").to_owned();
                 settings.panel_message_id=message["id"].as_str().unwrap_or("").to_owned();
                 if !settings.panel_channel_id.is_empty()&&!settings.panel_message_id.is_empty(){s.save_mods(&g,settings)?;}
-                else{warn!("Could not capture the moderation panel message IDs for guild {g}; panel may not persist across invocations.");}
-            }else{warn!("Could not fetch the newly published moderation panel for guild {g}; panel may not persist across invocations.");}
+            }
             Ok(())
         }
         "verify-settings"=>{
@@ -104,15 +98,13 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             Ok(())
         }
         "setup-role-picker"=>{
-            // Open the configuration form immediately. Ownership is checked when
-            // the modal is submitted, keeping the initial interaction instant.
-            s.callback(id,t,9,Some(modal("rolepicker:details","Role picker settings",vec![
-                input("rp-title","Menu title","└ notifications",false,100),
-                input("rp-description","Description","choose what you want to be pinged for.",true,500),
-                input("rp-placeholder","Dropdown placeholder","select...",false,150),
-                optional_input("rp-footer","Bottom button text","Done reading? Check out #chat.",false,80),
-                optional_input("rp-footer-channel","Bottom button channel ID (blank = this channel)","",false,22)
-            ]))).await
+            s.defer(id,t).await?;
+            let server=match s.api(Method::GET,&format!("/guilds/{g}"),None).await{
+                Ok(value)=>value,
+                Err(error)=>{let _=s.edit_original(t,"Timi could not check server ownership. Please try again.").await;return Err(error);}
+            };
+            if server["owner_id"].as_str()!=Some(&u){return s.edit_original(t,"Only the server owner can create role picker menus.").await;}
+            s.edit_original_with_components(t,"**Role picker setup**\n\nCreate a self-service role menu. You can publish multiple menus in different channels. Configure its appearance, choose the allowed roles, then publish.",vec![row(vec![button("rolepicker:start","Configure role picker",1)])]).await
         }
         "verify-panel"=>{
             let server=s.api(Method::GET,&format!("/guilds/{g}"),None).await?;

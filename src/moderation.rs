@@ -2,7 +2,7 @@ async fn mod_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Resul
     if !manage_guild(v){return s.reply(id,t,"You need Manage Server permission to edit moderation settings.",true).await;}
     let g=guild_id(v);let x=s.mods(&g);let mut next=x.clone();
     match custom{
-        "modpanel:enable"|"modpanel:disable"=>{next.enabled=custom=="modpanel:enable";s.save_mods(&g,next.clone())?;return reply_update(s,id,t,&mod_text(&next),mod_components(&next)).await;}
+        // Modal and ephemeral selector responses are themselves the initial acknowledgement.
         "modpanel:sanction"=>return s.callback(id,t,9,Some(modal("modpanel:sanction-modal","Edit applied sanction",vec![
             input("sanction","Sanction: timeout, kick, ban, delete",&x.sanction,false,12),
             input("timeout-minutes","Timeout duration in minutes",&x.timeout_minutes.to_string(),false,5)]) )).await,
@@ -16,20 +16,28 @@ async fn mod_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Resul
                 "components":[row(vec![json!({"type":8,"custom_id":"modpanel:log-select","placeholder":"Select a log channel","channel_types":[0],"min_values":1,"max_values":1})])],
                 "flags":64}))).await;
         }
-        "modpanel:log-select"=>{
-            let selected=v.pointer("/data/values/0").and_then(Value::as_str).unwrap_or("");
-            if !snowflake(selected){return s.reply(id,t,"Select a valid text channel.",true).await;}
-            next.log_channel_id=selected.to_owned();
-            s.save_mods(&g,next.clone())?;
-            refresh_mod_panel(s,&next).await;
-            return s.callback(id,t,7,Some(json!({"content":format!("Log channel set to <#{selected}>."),"components":[]}))).await;
-        }
+        "modpanel:enable"|"modpanel:disable"|"modpanel:log-select"|"modpanel:invites"|"modpanel:mentions"|"modpanel:caps"=>{},
+        _=>return Ok(())
+    }
+    // Acknowledge component clicks before saving, refreshing, or making any REST calls.
+    s.callback(id,t,6,None).await?;
+    if custom=="modpanel:log-select"{
+        let selected=v.pointer("/data/values/0").and_then(Value::as_str).unwrap_or("");
+        if !snowflake(selected){return s.edit_original(t,"Select a valid text channel.").await;}
+        next.log_channel_id=selected.to_owned();
+        s.save_mods(&g,next.clone())?;
+        refresh_mod_panel(s,&next).await;
+        return s.edit_original(t,&format!("Log channel set to <#{selected}>.")).await;
+    }
+    match custom{
+        "modpanel:enable"|"modpanel:disable"=>next.enabled=custom=="modpanel:enable",
         "modpanel:invites"=>next.block_invites=!next.block_invites,
         "modpanel:mentions"=>next.block_mass_mentions=!next.block_mass_mentions,
         "modpanel:caps"=>next.block_excessive_caps=!next.block_excessive_caps,
-        _=>return Ok(())
+        _=>{}
     }
-    s.save_mods(&g,next.clone())?;reply_update(s,id,t,&mod_text(&next),mod_components(&next)).await
+    s.save_mods(&g,next.clone())?;
+    s.edit_original_with_components(t,&mod_text(&next),mod_components(&next)).await
 }
 
 async fn moderate(s:&Arc<State>,msg:&Message)->Result<()>{

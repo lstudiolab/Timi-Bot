@@ -1,9 +1,10 @@
-async fn report_interaction_error(s:&State,id:&str,token:&str,error:anyhow::Error){
-    error!("Interaction {id} failed: {error:#}");
+async fn report_interaction_error(s:&State,_id:&str,token:&str,error:anyhow::Error){
+    error!("Interaction failed: {error:#}");
     let message="Timi could not complete that action. Check the bot's permissions, role hierarchy, and logs.";
-    // A deferred interaction must be edited; an unacknowledged one needs a first response.
-    if s.edit_original(token,message).await.is_err(){
-        let _=s.reply(id,token,message,true).await;
+    // Never send a second initial callback after an interaction may already have
+    // been acknowledged. That creates a misleading Unknown interaction (10062).
+    if let Err(edit_error)=s.edit_original(token,message).await{
+        warn!("Could not display interaction error after acknowledgement: {edit_error:#}");
     }
 }
 
