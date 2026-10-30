@@ -173,7 +173,7 @@ async fn modal_submit(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
     let g=guild_id(&v);let fields=parse_modal(v.pointer("/data/components").unwrap_or(&Value::Null));
     if custom.starts_with("rolepicker:"){return role_picker_modal_submit(s,id,t,&v,custom,&fields).await;}
     if custom.starts_with("ticket:"){
-        if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to edit ticket settings.",true).await;}
+        if !manage_guild(&v){return s.edit_original(t,"You need Manage Server permission to edit ticket settings.",true).await;}
         let mut x=s.ticket(&g);
         if custom=="ticket:wizard-stage1"{
             x.panel_title=fields.get("ticket-name").cloned().unwrap_or_default().trim().to_owned();
@@ -182,7 +182,7 @@ async fn modal_submit(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             x.open_label=fields.get("button-label").cloned().unwrap_or_default().trim().to_owned();
             x.category_name=fields.get("category").cloned().unwrap_or_default().trim().to_owned();
             if x.panel_title.is_empty()||x.panel_description.is_empty()||x.open_label.is_empty()||x.category_name.is_empty()||(!x.support_role_id.is_empty()&&!snowflake(&x.support_role_id)){
-                return s.reply(id,t,"Complete every required field. The support role must be a valid numeric Discord role ID.",true).await;
+                return s.edit_original(t,"Complete every required field. The support role must be a valid numeric Discord role ID.",true).await;
             }
             s.save_ticket(&g,x)?;
             return s.edit_original_with_components(t,"First part saved. Continue with the transcript and panel destination.",vec![row(vec![button("ticket:wizard-continue","Continue setup",1)])]).await;
@@ -192,7 +192,7 @@ async fn modal_submit(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             x.transcript_channel_id=fields.get("transcript-channel").cloned().unwrap_or_default().trim().to_owned();
             x.panel_channel_id=fields.get("panel-channel").cloned().unwrap_or_default().trim().to_owned();
             if x.ticket_message.is_empty()||[&x.transcript_channel_id,&x.panel_channel_id].iter().any(|v|!v.is_empty()&&!snowflake(v)){
-                return s.reply(id,t,"Enter a ticket message and valid numeric channel IDs. Leave optional channel IDs blank to use defaults.",true).await;
+                return s.edit_original(t,"Enter a ticket message and valid numeric channel IDs. Leave optional channel IDs blank to use defaults.",true).await;
             }
             s.save_ticket(&g,x.clone())?;refresh_ticket(s,&g,&x).await;
             return s.edit_original_with_components(t,&format!("Ticket setup saved.\\n\\n{}",ticket_text(&x)),ticket_components()).await;
@@ -205,29 +205,29 @@ async fn modal_submit(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
                 x.support_role_id=fields.get("support-role").cloned().unwrap_or_default().trim().into();
                 x.transcript_channel_id=fields.get("transcript").cloned().unwrap_or_default().trim().into();
                 x.panel_channel_id=fields.get("panel-channel").cloned().unwrap_or_default().trim().into();
-                for value in [&x.support_role_id,&x.transcript_channel_id,&x.panel_channel_id]{if !value.is_empty()&&!snowflake(value){return s.reply(id,t,"Role and channel IDs must be valid numeric Discord IDs.",true).await;}}
+                for value in [&x.support_role_id,&x.transcript_channel_id,&x.panel_channel_id]{if !value.is_empty()&&!snowflake(value){return s.edit_original(t,"Role and channel IDs must be valid numeric Discord IDs.",true).await;}}
             }
             _=>return Ok(())
         }
-        if x.panel_title.is_empty()||x.panel_description.is_empty()||x.open_label.is_empty()||x.ticket_message.is_empty()||x.close_label.is_empty()||x.category_name.is_empty(){return s.reply(id,t,"Ticket settings must contain text.",true).await;}
+        if x.panel_title.is_empty()||x.panel_description.is_empty()||x.open_label.is_empty()||x.ticket_message.is_empty()||x.close_label.is_empty()||x.category_name.is_empty(){return s.edit_original(t,"Ticket settings must contain text.",true).await;}
         s.save_ticket(&g,x.clone())?;refresh_ticket(s,&g,&x).await;
         return s.edit_original_with_components(t,&ticket_text(&x),ticket_components()).await;
     }
     if custom.starts_with("modpanel:"){
-        if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to edit moderation settings.",true).await;}
+        if !manage_guild(&v){return s.edit_original(t,"You need Manage Server permission to edit moderation settings.",true).await;}
         // Modal submissions have their own three-second acknowledgement deadline.
         let mut x=s.mods(&g);
         match custom{
             "modpanel:sanction-modal"=>{
                 let action=fields.get("sanction").cloned().unwrap_or_default().to_lowercase();
                 let mins=fields.get("timeout-minutes").and_then(|v|v.parse::<u64>().ok()).unwrap_or(0);
-                if !["timeout","kick","ban","delete"].contains(&action.as_str())||!(1..=40320).contains(&mins){return s.reply(id,t,"Use timeout, kick, ban, or delete; timeout must be 1–40320 minutes.",true).await;}
+                if !["timeout","kick","ban","delete"].contains(&action.as_str())||!(1..=40320).contains(&mins){return s.edit_original(t,"Use timeout, kick, ban, or delete; timeout must be 1–40320 minutes.",true).await;}
                 x.sanction=action;x.timeout_minutes=mins;
             }
             "modpanel:duration-modal"|"modpanel:max-count-modal"=>{
                 let n=fields.get("value").and_then(|v|v.parse::<u64>().ok()).unwrap_or(0);
-                if custom=="modpanel:duration-modal"{if !(1..=60).contains(&n){return s.reply(id,t,"Action duration must be 1–60 seconds.",true).await;}x.action_duration_seconds=n;}
-                else{if !(1..=100).contains(&n){return s.reply(id,t,"Max message count must be 1–100.",true).await;}x.max_message_count=n as usize;}
+                if custom=="modpanel:duration-modal"{if !(1..=60).contains(&n){return s.edit_original(t,"Action duration must be 1–60 seconds.",true).await;}x.action_duration_seconds=n;}
+                else{if !(1..=100).contains(&n){return s.edit_original(t,"Max message count must be 1–100.",true).await;}x.max_message_count=n as usize;}
             }
             _=>return Ok(())
         }
