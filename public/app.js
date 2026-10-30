@@ -75,10 +75,7 @@
     try {
       const result = await send("/api/verify-code", { session, code: code.value.trim() });
       codeForm.hidden = true;
-      intro.textContent = "Your email is confirmed. Timi is assigning your Discord role.";
-      show(result.message || "Email confirmed. Waiting for Timi…", true);
-      title.textContent = "Almost done";
-      show(result.message || "Email verified and your Discord role has been assigned.", true);
+            show(result.message || "Email verified and your Discord role has been assigned.", true);
       intro.textContent = "Your email is verified and your Discord role has been assigned.";
       title.textContent = "You’re all set.";
       history.replaceState({}, "", location.pathname);
