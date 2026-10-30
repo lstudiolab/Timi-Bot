@@ -78,26 +78,10 @@
       intro.textContent = "Your email is confirmed. Timi is assigning your Discord role.";
       show(result.message || "Email confirmed. Waiting for Timi…", true);
       title.textContent = "Almost done";
-      let finished = false;
-      for (let attempt = 0; attempt < 45; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const response = await fetch(api + "/api/status?session=" + encodeURIComponent(session), { headers: { "Accept": "application/json" }, cache: "no-store" });
-        const status = await response.json().catch(() => ({}));
-        if (!response.ok || !status.ok) throw new Error(status.message || "Could not check verification status.");
-        if (status.status === "completed") {
-          show(status.result?.message || "Email verified and your Discord role has been assigned.", true);
-          intro.textContent = "Your email is verified and your Discord role has been assigned.";
-          title.textContent = "You’re all set.";
-          history.replaceState({}, "", location.pathname);
-          finished = true;
-          break;
-        }
-        if (status.status === "failed") throw new Error(status.result?.message || "Timi could not assign your Discord role.");
-      }
-      if (!finished) {
-        show("Your email is confirmed, but Timi has not responded yet. Keep this page open and check Discord shortly.", true);
-        title.textContent = "Verification pending";
-      }
+      show(result.message || "Email verified and your Discord role has been assigned.", true);
+      intro.textContent = "Your email is verified and your Discord role has been assigned.";
+      title.textContent = "You’re all set.";
+      history.replaceState({}, "", location.pathname);
     } catch (error) {
       show(error.message || "Could not verify that code.");
       verifyButton.disabled = false;
