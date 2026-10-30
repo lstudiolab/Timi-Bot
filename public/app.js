@@ -17,11 +17,20 @@
     notice.classList.toggle("success", success);
   };
   async function send(path, data) {
-    const response = await fetch(api + path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify(data)
-    });
+    let response;
+    try {
+      response = await fetch(api + path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify(data),
+        signal: AbortSignal.timeout(25000)
+      });
+    } catch (error) {
+      if (error.name === "TimeoutError" || error.name === "AbortError") {
+        throw new Error("The email service is taking too long to respond. Please try again in a moment.");
+      }
+      throw new Error("Could not connect to Timi. Check your connection and try again.");
+    }
     const result = await response.json().catch(() => ({}));
     if (!response.ok || !result.ok) throw new Error(result.message || "Request failed.");
     return result;
