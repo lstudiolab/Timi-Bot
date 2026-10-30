@@ -130,7 +130,7 @@ async function apiRequest(pathname, method = "GET", body) {
     method,
     headers: { "Content-Type": "application/json", "Authorization": "Bearer " + secret },
     body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(15000)
+    signal: AbortSignal.timeout(90000)
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.message || ("Verification API returned HTTP " + response.status));
@@ -164,7 +164,7 @@ function startWorker(client) {
     } finally { running = false; }
   };
   poll();
-  const timer = setInterval(poll, 4000);
+  const timer = setInterval(poll, 15000);
   timer.unref();
 }
 function startWebServer(client) {
