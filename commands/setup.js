@@ -52,7 +52,7 @@ function privateOverwrites(guild, userId, botId) {
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("setup")
+    .setName("ticket-setup")
     .setDescription("Create Timi's private channels and ticket category.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
