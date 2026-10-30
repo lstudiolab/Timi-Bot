@@ -27,6 +27,26 @@ cargo build --release
 
 The release binary is compiled for the Android device architecture. Keep Termux active while Timi runs. A persistent shell session such as `tmux` can keep the process attached to a session.
 
+
+## Update on Termux
+
+After the first installation, updates can be installed and restarted with one command:
+
+```sh
+bash update.sh
+```
+
+The script pulls the latest `main` branch, builds the release binary, stops the previous Timi process if it was started by the script, and starts the updated bot in the background. It does not overwrite `.env` or the `data/` directory.
+
+**First use:** If Timi is currently running in your terminal or tmux and you have not used this script before, stop that old process with `Ctrl+C` first. Then run `bash update.sh`. After that, use the script for future updates.
+
+View the bot log with:
+
+```sh
+tail -f logs/timi.log
+```
+
+
 ## Configuration
 
 Set these values in `.env`:
