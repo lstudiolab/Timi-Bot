@@ -3,7 +3,7 @@ const verification = require("../verification-system");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("verifypanel")
+    .setName("verify-panel")
     .setDescription("Publish the Timi risk-based verification panel.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   async execute(interaction) {
