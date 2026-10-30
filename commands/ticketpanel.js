@@ -443,7 +443,7 @@ async function handleInteraction(interaction, client) {
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("ticketpanel")
+    .setName("ticket-panel")
     .setDescription("Create and publish a ticket panel, then customize its initial settings.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   async execute(interaction) {
