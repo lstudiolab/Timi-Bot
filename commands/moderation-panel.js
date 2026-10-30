@@ -365,7 +365,7 @@ async function handleInteraction(interaction) {
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("moderationconfig")
+    .setName("moderation-settings")
     .setDescription("Configure Timi moderation and anti-spam protection.")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
   async execute(interaction) {
