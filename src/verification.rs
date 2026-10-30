@@ -62,21 +62,22 @@ async fn verify_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
 }
 async fn bot_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Result<()>{
     let bits:Vec<&str>=custom.split(':').collect();if bits.len()!=4{return Ok(());}
+    s.defer(id,t).await?;
     let (decision,g,bot)=(bits[1],bits[2],bits[3]);let user=user_id(v);
     let guild=s.api(Method::GET,&format!("/guilds/{g}"),None).await?;
     if guild["owner_id"].as_str()!=Some(&user)&&!manage_guild(v){
-        return s.reply(id,t,"Only the server owner or a member with Manage Server can decide.",true).await;
+        return s.edit_original(t,"Only the server owner or a member with Manage Server can decide.",true).await;
     }
     let key=format!("{g}:{bot}");
     let pending=s.runtime.lock().ok().and_then(|r|r.pending_bots.get(&key).cloned());
     if pending.as_deref()!=v.pointer("/message/id").and_then(Value::as_str){
-        return s.reply(id,t,"This request is no longer pending.",true).await;
+        return s.edit_original(t,"This request is no longer pending.",true).await;
     }
     let bot_member=s.api(Method::GET,&format!("/guilds/{g}/members/{bot}"),None).await.ok();
     if decision=="no"{
         if bot_member.is_some(){
             if let Err(error)=s.api(Method::DELETE,&format!("/guilds/{g}/members/{bot}?reason=Bot%20rejected%20through%20Timi%20bot%20protection"),None).await{
-                return s.reply(id,t,&format!("Timi could not remove the rejected bot. Check Kick Members permission and role hierarchy. Details: {error}"),true).await;
+                return s.edit_original(t,&format!("Timi could not remove the rejected bot. Check Kick Members permission and role hierarchy. Details: {error}"),true).await;
             }
         }
         s.runtime.lock().ok().map(|mut r|r.pending_bots.remove(&key));
