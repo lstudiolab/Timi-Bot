@@ -18,12 +18,15 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
         optional_input("panel-channel","Panel channel ID (blank = this channel)",&x.panel_channel_id,false,22)]))).await;}
     if custom=="ticket:open"{s.defer(id,t).await?;return open_ticket(s,t,&g,&u).await;}
     if custom=="ticket:close"||custom=="ticket:confirm-close"{
-        let ch=s.api(Method::GET,&format!("/channels/{c}"),None).await?;
+        s.defer(id,t).await?;
+        let ch=match s.api(Method::GET,&format!("/channels/{c}"),None).await{
+            Ok(value)=>value,Err(error)=>{let _=s.edit_original(t,"Timi could not check this ticket. Try again.");return Err(error);}
+        };
         let owner=ch["topic"].as_str().unwrap_or("").strip_prefix("timi-ticket-owner:").unwrap_or("").to_owned();
-        if owner.is_empty(){return s.reply(id,t,"This is not a Timi ticket channel.",true).await;}
-        if u!=owner&&!manager{return s.reply(id,t,"Only the ticket owner or a server manager can close this ticket.",true).await;}
-        if custom=="ticket:close"{return s.callback(id,t,4,Some(json!({"content":"Are you sure you want to close this ticket?","components":[row(vec![button("ticket:confirm-close","Yes, close it",4)])],"flags":64}))).await;}
-        s.callback(id,t,7,Some(json!({"content":"Closing this ticket in 5 seconds…","components":[]}))).await?;
+        if owner.is_empty(){return s.edit_original(t,"This is not a Timi ticket channel.").await;}
+        if u!=owner&&!manager{return s.edit_original(t,"Only the ticket owner or a server manager can close this ticket.").await;}
+        if custom=="ticket:close"{return s.edit_original_with_components(t,"Are you sure you want to close this ticket?",vec![row(vec![button("ticket:confirm-close","Yes, close it",4)])]).await;}
+        s.edit_original(t,"Closing this ticket in 5 seconds…").await?;
         let cloned=s.clone();let guild=g.clone();let channel=c.clone();
         tokio::spawn(async move{sleep(Duration::from_secs(5)).await;close_ticket(&cloned,&guild,&channel).await;});
         return Ok(());
@@ -41,8 +44,11 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
             optional_input("transcript","Transcript channel ID (blank for none)",&x.transcript_channel_id,false,22),
             optional_input("panel-channel","Panel channel ID (blank for current)",&x.panel_channel_id,false,22)]))).await,
         "ticket:publish"=>{
-            let dest=publish_ticket(s,&g,&c,x).await?;
-            let _=dest;reply_update(s,id,t,&ticket_text(&s.ticket(&g)),ticket_components()).await
+            s.defer(id,t).await?;
+            match publish_ticket(s,&g,&c,x).await{
+                Ok(dest)=>s.edit_original(t,&format!("Ticket panel published or updated in <#{dest}>.")).await,
+                Err(error)=>{let _=s.edit_original(t,"Timi could not publish the ticket panel. Check channel permissions.");Err(error)}
+            }
         }
         _=>Ok(())
     }
@@ -162,6 +168,7 @@ async fn close_ticket(s:&State,g:&str,c:&str)->Result<()>{
     s.api(Method::DELETE,&format!("/channels/{c}"),None).await?;Ok(())
 }
 async fn modal_submit(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
+    s.defer(id,t).await?;
     let custom=v.pointer("/data/custom_id").and_then(Value::as_str).unwrap_or("");
     let g=guild_id(&v);let fields=parse_modal(v.pointer("/data/components").unwrap_or(&Value::Null));
     if custom.starts_with("rolepicker:"){return role_picker_modal_submit(s,id,t,&v,custom,&fields).await;}
@@ -178,7 +185,7 @@ async fn modal_submit(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
                 return s.reply(id,t,"Complete every required field. The support role must be a valid numeric Discord role ID.",true).await;
             }
             s.save_ticket(&g,x)?;
-            return s.callback(id,t,4,Some(json!({"content":"First part saved. Continue with the transcript and panel destination.","components":[row(vec![button("ticket:wizard-continue","Continue setup",1)])],"flags":64}))).await;
+            return s.edit_original_with_components(t,"First part saved. Continue with the transcript and panel destination.",vec![row(vec![button("ticket:wizard-continue","Continue setup",1)])]).await;
         }
         if custom=="ticket:wizard-stage2"{
             x.ticket_message=fields.get("ticket-message").cloned().unwrap_or_default().trim().to_owned();
@@ -188,7 +195,7 @@ async fn modal_submit(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
                 return s.reply(id,t,"Enter a ticket message and valid numeric channel IDs. Leave optional channel IDs blank to use defaults.",true).await;
             }
             s.save_ticket(&g,x.clone())?;refresh_ticket(s,&g,&x).await;
-            return s.callback(id,t,4,Some(json!({"content":format!("Ticket setup saved.\\n\\n{}",ticket_text(&x)),"components":ticket_components(),"flags":64}))).await;
+            return s.edit_original_with_components(t,&format!("Ticket setup saved.\\n\\n{}",ticket_text(&x)),ticket_components()).await;
         }
         match custom{
             "ticket:modal-panel"=>{x.panel_title=fields.get("title").cloned().unwrap_or_default().trim().into();x.panel_description=fields.get("description").cloned().unwrap_or_default().trim().into();x.open_label=fields.get("open-label").cloned().unwrap_or_default().trim().into();}
@@ -204,12 +211,11 @@ async fn modal_submit(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
         }
         if x.panel_title.is_empty()||x.panel_description.is_empty()||x.open_label.is_empty()||x.ticket_message.is_empty()||x.close_label.is_empty()||x.category_name.is_empty(){return s.reply(id,t,"Ticket settings must contain text.",true).await;}
         s.save_ticket(&g,x.clone())?;refresh_ticket(s,&g,&x).await;
-        return reply_update(s,id,t,&ticket_text(&x),ticket_components()).await;
+        return s.edit_original_with_components(t,&ticket_text(&x),ticket_components()).await;
     }
     if custom.starts_with("modpanel:"){
         if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to edit moderation settings.",true).await;}
         // Modal submissions have their own three-second acknowledgement deadline.
-        s.defer(id,t).await?;
         let mut x=s.mods(&g);
         match custom{
             "modpanel:sanction-modal"=>{

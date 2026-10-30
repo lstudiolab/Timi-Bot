@@ -11,8 +11,11 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
         }
         "ticket-panel"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to publish ticket panels.",true).await;}
-            let settings=s.ticket(&g);let destination=publish_ticket(s,&g,&c,settings).await?;
-            s.reply(id,t,&format!("Ticket panel published or updated in <#{destination}>."),true).await
+            s.defer(id,t).await?;
+            match publish_ticket(s,&g,&c,s.ticket(&g)).await{
+                Ok(destination)=>s.edit_original(t,&format!("Ticket panel published or updated in <#{destination}>.")).await,
+                Err(error)=>{let _=s.edit_original(t,"Timi could not publish the ticket panel. Check channel permissions and configuration.").await;Err(error)}
+            }
         }
         "ticket-settings"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to configure tickets.",true).await;}
