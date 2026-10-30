@@ -64,32 +64,32 @@ async fn role_picker_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str
         return s.edit_original(t,&format!("Role picker menu published in <#{}>. Menu ID: {}. Run /setup-role-picker to create another menu.",draft.channel_id,menu_id)).await;
     }
     if let Some(menu_id)=custom.strip_prefix("rolepicker:menu:"){
-        let mut menu=match s.role_picker_menu(menu_id){Some(m)=>m,None=>return s.reply(id,t,"This role picker is no longer available.",true).await};
-        if menu.guild_id!=g{return s.reply(id,t,"This role picker belongs to another server.",true).await;}
+        s.defer(id,t).await?;
+        let mut menu=match s.role_picker_menu(menu_id){Some(m)=>m,None=>return s.edit_original(t,"This role picker is no longer available.").await};
+        if menu.guild_id!=g{return s.edit_original(t,"This role picker belongs to another server.").await;}
         let selected=v.pointer("/data/values").and_then(Value::as_array).map(|a|a.iter().filter_map(Value::as_str).map(str::to_owned).collect::<Vec<_>>()).unwrap_or_default();
         let previous=menu.selections.get(&u).cloned().unwrap_or_default();
         let add=selected.iter().filter(|r|!previous.contains(r)).cloned().collect::<Vec<_>>();
         let remove=previous.iter().filter(|r|!selected.contains(r)).cloned().collect::<Vec<_>>();
         for role in &add{
             if let Err(error)=s.api(Method::PUT,&format!("/guilds/{g}/members/{u}/roles/{role}"),None).await{
-                return s.reply(id,t,&format!("Timi could not assign a selected role. Check Manage Roles and role hierarchy. {error}"),true).await;
+                return s.edit_original(t,&format!("Timi could not assign a selected role. Check Manage Roles and role hierarchy. {error}")).await;
             }
         }
         for role in &remove{
             if let Err(error)=s.api(Method::DELETE,&format!("/guilds/{g}/members/{u}/roles/{role}"),None).await{
-                return s.reply(id,t,&format!("Timi could not remove a deselected role. Check Manage Roles and role hierarchy. {error}"),true).await;
+                return s.edit_original(t,&format!("Timi could not remove a deselected role. Check Manage Roles and role hierarchy. {error}")).await;
             }
         }
         menu.selections.insert(u,selected.clone());
         s.save_role_picker_menu(menu)?;
-        return s.reply(id,t,if selected.is_empty(){"Your role selections have been cleared."}else{"Your role selections have been updated."},true).await;
+        return s.edit_original(t,if selected.is_empty(){"Your role selections have been cleared."}else{"Your role selections have been updated."}).await;
     }
     Ok(())
 }
 async fn role_picker_modal_submit(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str,fields:&HashMap<String,String>)->Result<()>{
     if custom!="rolepicker:details"{return Ok(());}
     let g=guild_id(v);let u=user_id(v);let channel=channel_id(v);
-    s.defer(id,t).await?;
     let server=s.api(Method::GET,&format!("/guilds/{g}"),None).await?;
     if server["owner_id"].as_str()!=Some(&u){return s.edit_original(t,"Only the server owner can configure role picker menus.").await;}
     let title=fields.get("rp-title").cloned().unwrap_or_default().trim().to_owned();
