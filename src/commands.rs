@@ -40,27 +40,62 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             Ok(())
         }
         "verify-settings"=>{
-            let server=s.api(Method::GET,&format!("/guilds/{g}"),None).await?;
-            if server.get("owner_id").and_then(Value::as_str)!=Some(&u){return s.reply(id,t,"Only the server owner can change verification settings.",true).await;}
+            // Acknowledge immediately so Discord does not expire the interaction
+            // while Timi checks ownership, roles, and channel configuration.
+            s.defer(id,t).await?;
+            let server=match s.api(Method::GET,&format!("/guilds/{g}"),None).await{
+                Ok(server)=>server,
+                Err(error)=>{
+                    let _=s.edit_original(t,"Timi could not check server ownership. Please try again.").await;
+                    return Err(error);
+                }
+            };
+            if server.get("owner_id").and_then(Value::as_str)!=Some(&u){
+                return s.edit_original(t,"Only the server owner can change verification settings.").await;
+            }
             let mut x=s.verify(&g);
             let role=opt_str(&opts,"role");let required=opt_str(&opts,"required-role");let clear=opt_bool(&opts,"clear-required-role").unwrap_or(false);
             let age=opt_num(&opts,"min-age-days");let review=opt_str(&opts,"review-channel");let title=opt_str(&opts,"title");let desc=opt_str(&opts,"description");
             if role.is_none()&&required.is_none()&&!clear&&age.is_none()&&review.is_none()&&title.is_none()&&desc.is_none(){
-                return s.reply(id,t,&format!("**Timi verification settings**\nVerified role: {}\nRequired role: {}\nMinimum account age: {} days\nReview channel: {}\nThresholds: 80+ pass, 60–79 manual review, below 60 kick\nWeights: age 40, history 20, attempts 20, behavior 10, avatar 10",
+                return s.edit_original(t,&format!("**Timi verification settings**\nVerified role: {}\nRequired role: {}\nMinimum account age: {} days\nReview channel: {}\nThresholds: 80+ pass, 60–79 manual review, below 60 kick\nWeights: age 40, history 20, attempts 20, behavior 10, avatar 10",
                     if x.role_id.is_empty(){"Not configured".into()}else{format!("<@&{}>",x.role_id)},
                     if x.required_role_id.is_empty(){"None".into()}else{format!("<@&{}>",x.required_role_id)},x.min_age_days,
-                    if x.review_channel_id.is_empty(){"#timi fallback".into()}else{format!("<#{}>",x.review_channel_id)}),true).await;
+                    if x.review_channel_id.is_empty(){"#timi fallback".into()}else{format!("<#{}>",x.review_channel_id)})).await;
             }
-            if let Some(v)=role{if let Err(reason)=validate_verification_role(s,&g,&v,true).await{return s.reply(id,t,&reason,true).await;}x.role_id=v;}
-            if let Some(v)=required{if let Err(reason)=validate_verification_role(s,&g,&v,false).await{return s.reply(id,t,&reason,true).await;}x.required_role_id=v;}
+            if let Some(v)=role{
+                if let Err(reason)=validate_verification_role(s,&g,&v,true).await{
+                    return s.edit_original(t,&reason).await;
+                }
+                x.role_id=v;
+            }
+            if let Some(v)=required{
+                if let Err(reason)=validate_verification_role(s,&g,&v,false).await{
+                    return s.edit_original(t,&reason).await;
+                }
+                x.required_role_id=v;
+            }
             if clear{x.required_role_id.clear();}
             if let Some(v)=age{x.min_age_days=v;}
-            if let Some(v)=review{if !snowflake(&v){return s.reply(id,t,"Select a valid text channel.",true).await;}x.review_channel_id=v;}
+            if let Some(v)=review{
+                if !snowflake(&v){return s.edit_original(t,"Select a valid text channel.").await;}
+                x.review_channel_id=v;
+            }
             if let Some(v)=title{x.panel_title=if v.trim().is_empty(){"Verify your account".into()}else{v.trim().into()};}
             if let Some(v)=desc{x.panel_description=if v.trim().is_empty(){"Press Verify to have Timi assess your account and server history.".into()}else{v.trim().into()};}
             s.save_verify(&g,x.clone())?;
-            for p in &x.published_panels{let _=s.edit(&p.channel_id,&p.message_id,verify_panel(&x)).await;}
-            s.reply(id,t,"Verification settings saved. Existing panels have been refreshed.",true).await
+            // Respond immediately after saving. Panel refreshes happen in the
+            // background so old panels cannot make the settings interaction time out.
+            s.edit_original(t,"Verification settings saved. Refreshing existing panels in the background.").await?;
+            let state=Arc::clone(s);
+            tokio::spawn(async move{
+                let panel=verify_panel(&x);
+                for p in &x.published_panels{
+                    if let Err(error)=state.edit(&p.channel_id,&p.message_id,panel.clone()).await{
+                        warn!("Could not refresh verification panel {} in channel {}: {error:#}",p.message_id,p.channel_id);
+                    }
+                }
+            });
+            Ok(())
         }
         "verify-panel"=>{
             let server=s.api(Method::GET,&format!("/guilds/{g}"),None).await?;
