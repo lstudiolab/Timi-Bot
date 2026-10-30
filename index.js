@@ -135,7 +135,6 @@ async function initializeGuild(guild) {
 
 client.once("ready", async () => {
   console.log(`Timi is online as ${client.user.tag}`);
-  verification.startWebServer(client);
   await Promise.allSettled([...client.guilds.cache.values()].map(async guild => {
     await initializeGuild(guild);
     await recoveryBackup.snapshotGuild(guild);
@@ -283,6 +282,7 @@ async function monitorJoinBurst(member) {
 }
 
 client.on("guildMemberAdd", member => {
+  verification.recordJoin(member);
   botProtection.onGuildMemberAdd(member, client).catch(error => {
     console.error("Bot protection failed:", error.message);
   });
@@ -293,6 +293,8 @@ client.on("guildMemberAdd", member => {
     console.error("New-account monitoring failed:", error.message);
   });
 });
+
+client.on("guildMemberRemove", member => verification.recordLeave(member));
 
 const channelDeletionHistory = new Map();
 const CHANNEL_DELETE_WINDOW_MS = 60_000;
@@ -584,6 +586,7 @@ client.on("messageCreate", async message => {
     }
 
     if (reason) {
+      verification.recordSuspiciousMessage(message, reason);
       const recentIds = state.recent.map(item => item.id);
       spamState.delete(key);
       await enforceSpam(message, settings, reason, recentIds);
