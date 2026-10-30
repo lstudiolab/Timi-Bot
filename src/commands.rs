@@ -97,6 +97,15 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             });
             Ok(())
         }
+        "setup-role-picker"=>{
+            s.defer(id,t).await?;
+            let server=match s.api(Method::GET,&format!("/guilds/{g}"),None).await{
+                Ok(value)=>value,
+                Err(error)=>{let _=s.edit_original(t,"Timi could not check server ownership. Please try again.").await;return Err(error);}
+            };
+            if server["owner_id"].as_str()!=Some(&u){return s.edit_original(t,"Only the server owner can create role picker menus.").await;}
+            s.edit_original_with_components(t,"**Role picker setup**\n\nCreate a self-service role menu. You can publish multiple menus in different channels. Configure its appearance, choose the allowed roles, then publish.",vec![row(vec![button("rolepicker:start","Configure role picker",1)])]).await
+        }
         "verify-panel"=>{
             let server=s.api(Method::GET,&format!("/guilds/{g}"),None).await?;
             if server.get("owner_id").and_then(Value::as_str)!=Some(&u){return s.reply(id,t,"Only the server owner can publish the verification panel.",true).await;}

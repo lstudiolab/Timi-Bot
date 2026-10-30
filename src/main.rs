@@ -43,6 +43,7 @@ include!("config.rs");
 include!("discord.rs");
 include!("commands.rs");
 include!("tickets.rs");
+include!("role_picker.rs");
 include!("moderation.rs");
 include!("verification.rs");
 include!("protection.rs");

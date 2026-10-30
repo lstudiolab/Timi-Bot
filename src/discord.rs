@@ -57,7 +57,8 @@ async fn register_commands(s:&State)->Result<()>{
             {"type":7,"name":"review-channel","description":"Channel for manual review","channel_types":[0],"required":false},
             {"type":3,"name":"title","description":"Verification panel title","max_length":200,"required":false},
             {"type":3,"name":"description","description":"Verification panel description","max_length":1000,"required":false}]},
-        {"name":"verify-panel","description":"Publish the Timi risk-based verification panel.","default_member_permissions":"32"}
+        {"name":"verify-panel","description":"Publish the Timi risk-based verification panel.","default_member_permissions":"32"},
+        {"name":"setup-role-picker","description":"Create a self-service role picker menu (server owner only)."}
     ]);
     let path=if let Some(g)=&s.config.guild_id{format!("/applications/{}/guilds/{g}/commands",s.config.client_id)}else{format!("/applications/{}/commands",s.config.client_id)};
     s.api(Method::PUT,&path,Some(commands)).await?;info!("Registered Rust slash commands.");Ok(())

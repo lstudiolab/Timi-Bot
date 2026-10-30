@@ -96,6 +96,22 @@ struct MemberRecord {
     #[serde(rename = "lastSuspiciousAt")] last_suspicious:i64,
     #[serde(rename = "lastSuspiciousReason")] last_reason:String,
 }
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+struct RolePickerRole { id:String, name:String }
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+struct RolePickerDraft {
+    guild_id:String, channel_id:String, title:String, description:String,
+    placeholder:String, footer_text:String, footer_channel_id:String, roles:Vec<String>,
+}
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+struct RolePickerMenu {
+    id:String, guild_id:String, channel_id:String, message_id:String, title:String,
+    description:String, placeholder:String, footer_text:String, footer_channel_id:String,
+    roles:Vec<RolePickerRole>, selections:HashMap<String,Vec<String>>,
+}
 #[derive(Default, Serialize, Deserialize)]
 struct Store {
     #[serde(default)] tickets:HashMap<String,TicketSettings>,
@@ -104,6 +120,8 @@ struct Store {
     #[serde(default)] members:HashMap<String,MemberRecord>,
     #[serde(default)] channels:HashMap<String,Value>,
     #[serde(default)] messages:HashMap<String,Vec<Value>>,
+    #[serde(default)] role_picker_menus:HashMap<String,RolePickerMenu>,
+    #[serde(default)] role_picker_drafts:HashMap<String,RolePickerDraft>,
 }
 fn migrate_legacy_data(dir:&std::path::Path,store:&mut Store)->Result<bool>{
     fn read(path:&PathBuf)->Option<Value>{fs::read(path).ok().and_then(|b|serde_json::from_slice(&b).ok())}
@@ -251,6 +269,14 @@ impl State {
     fn mods(&self,g:&str)->ModSettings { self.store.lock().ok().and_then(|s|s.moderation.get(g).cloned()).unwrap_or_default() }
     fn verify(&self,g:&str)->VerifySettings { self.store.lock().ok().and_then(|s|s.verification.get(g).cloned()).unwrap_or_default() }
     fn member(&self,g:&str,u:&str)->MemberRecord { self.store.lock().ok().and_then(|s|s.members.get(&format!("{g}:{u}")).cloned()).unwrap_or_default() }
+    fn role_picker_draft(&self,id:&str)->Option<RolePickerDraft>{self.store.lock().ok().and_then(|s|s.role_picker_drafts.get(id).cloned())}
+    fn role_picker_menu(&self,id:&str)->Option<RolePickerMenu>{self.store.lock().ok().and_then(|s|s.role_picker_menus.get(id).cloned())}
+    fn save_role_picker_draft(&self,id:&str,draft:RolePickerDraft)->Result<()>{
+        self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?.role_picker_drafts.insert(id.into(),draft);self.persist()
+    }
+    fn save_role_picker_menu(&self,menu:RolePickerMenu)->Result<()>{
+        self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?.role_picker_menus.insert(menu.id.clone(),menu);self.persist()
+    }
     fn save_ticket(&self,g:&str,v:TicketSettings)->Result<()> { self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?.tickets.insert(g.into(),v);self.persist() }
     fn save_mods(&self,g:&str,v:ModSettings)->Result<()> { self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?.moderation.insert(g.into(),v);self.persist() }
     fn save_verify(&self,g:&str,v:VerifySettings)->Result<()> { self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?.verification.insert(g.into(),v);self.persist() }

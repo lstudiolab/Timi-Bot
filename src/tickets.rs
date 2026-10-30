@@ -1,5 +1,6 @@
 async fn component(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
     let custom=v.pointer("/data/custom_id").and_then(Value::as_str).unwrap_or("").to_owned();
+    if custom.starts_with("rolepicker:"){return role_picker_component(s,id,t,&v,&custom).await;}
     if custom.starts_with("ticket:"){return ticket_component(s,id,t,&v,&custom).await;}
     if custom.starts_with("modpanel:"){return mod_component(s,id,t,&v,&custom).await;}
     if custom.starts_with("verify:"){return verify_component(s,id,t,&v,&custom).await;}
@@ -163,6 +164,7 @@ async fn close_ticket(s:&State,g:&str,c:&str)->Result<()>{
 async fn modal_submit(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
     let custom=v.pointer("/data/custom_id").and_then(Value::as_str).unwrap_or("");
     let g=guild_id(&v);let fields=parse_modal(v.pointer("/data/components").unwrap_or(&Value::Null));
+    if custom.starts_with("rolepicker:"){return role_picker_modal_submit(s,id,t,&v,custom,&fields).await;}
     if custom.starts_with("ticket:"){
         if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to edit ticket settings.",true).await;}
         let mut x=s.ticket(&g);
