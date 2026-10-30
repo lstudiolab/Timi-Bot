@@ -1,8 +1,9 @@
+/target/
 node_modules/
-.env
-.env.*
-!.env.example
-npm-debug.log*
+/.env
+/.env.*
+!/.env.example
+/data/*.json
+/data/*.tmp
 .DS_Store
-data/*.json
-data/*.tmp
+npm-debug.log*
