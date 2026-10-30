@@ -27,6 +27,9 @@ const DEFAULT_SETTINGS = Object.freeze({
   logChannelId: null,
   actionDurationSeconds: 3,
   maxMessageCount: 3,
+  blockInvites: true,
+  blockMassMentions: true,
+  blockExcessiveCaps: true,
   panelChannelId: null,
   panelMessageId: null
 });
