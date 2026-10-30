@@ -93,7 +93,9 @@ function scoreAttempts(record, max) {
   const cutoff = Date.now() - 10 * 60 * 1000;
   record.verificationAttempts = (record.verificationAttempts || []).filter(t => t >= cutoff);
   const count = record.verificationAttempts.length;
-  const fraction = count <= 1 ? 1 : count === 2 ? 0.75 : count === 3 ? 0.45 : 0.1;
+  // Retries are a weak signal: reduce points gradually rather than treating
+  // a second click as strong evidence of abuse.
+  const fraction = count <= 1 ? 1 : count === 2 ? 0.9 : count === 3 ? 0.8 : count <= 5 ? 0.7 : 0.6;
   return { points: clamp(max * fraction, max), max, passed: count <= 1, reason: count + " verification attempt(s) in the last 10 minutes." };
 }
 function scoreBehavior(record, max) {
@@ -106,22 +108,41 @@ function scoreAvatar(user, max) {
   const isDefault = user.avatar == null;
   return { points: isDefault ? clamp(max * 0.25, max) : max, max, passed: !isDefault, reason: isDefault ? "Default Discord avatar detected; this is a weak signal only." : "Custom avatar present." };
 }
-async function assessMember(member, settings) {
+async function assessMember(member, settings, onProgress = async () => {}) {
+  // Refresh data from Discord before scoring so cached profile/member data is
+  // not mistaken for a current assessment.
+  await onProgress("Refreshing your Discord account and server membership…");
+  const [freshUser, freshMember] = await Promise.all([
+    member.client.users.fetch(member.id, { force: true }).catch(() => member.user),
+    member.guild.members.fetch({ user: member.id, force: true }).catch(() => member)
+  ]);
+
   const record = memberRecord(member.guild.id, member.id);
   record.verificationAttempts ||= [];
   record.verificationAttempts.push(Date.now());
-  const checks = {
-    age: scoreAge(member.user, settings),
-    history: scoreHistory(record, settings.pointMax.history),
-    attempts: scoreAttempts(record, settings.pointMax.attempts),
-    behavior: scoreBehavior(record, settings.pointMax.behavior),
-    avatar: scoreAvatar(member.user, settings.pointMax.avatar)
-  };
+
+  await onProgress("Checking account creation date and minimum-age requirement…");
+  const age = scoreAge(freshUser, settings);
+
+  await onProgress("Reviewing recorded server joins, leaves, and previous failed checks…");
+  const history = scoreHistory(record, settings.pointMax.history);
+
+  await onProgress("Evaluating recent verification attempts…");
+  const attempts = scoreAttempts(record, settings.pointMax.attempts);
+
+  await onProgress("Reviewing recorded message-behavior signals…");
+  const behavior = scoreBehavior(record, settings.pointMax.behavior);
+
+  await onProgress("Inspecting Discord profile avatar signals…");
+  const avatar = scoreAvatar(freshUser, settings.pointMax.avatar);
+
+  await onProgress("Calculating the risk score and applying the server's decision thresholds…");
+  const checks = { age, history, attempts, behavior, avatar };
   const score = Object.values(checks).reduce((sum, item) => sum + item.points, 0);
   const ageFailed = !checks.age.passed;
   const decision = ageFailed ? "review" : score >= settings.thresholds.pass ? "pass" : score >= settings.thresholds.review ? "review" : "kick";
   writeStore();
-  return { score, checks, decision, ageFailed };
+  return { score, checks, decision, ageFailed, member: freshMember, user: freshUser };
 }
 async function getLogChannel(guild, settings) {
   if (settings.reviewChannelId) {
@@ -155,7 +176,9 @@ async function handleInteraction(interaction) {
     await interaction.editReply("You are already verified.");
     return true;
   }
-  const result = await assessMember(member, settings);
+  const result = await assessMember(member, settings, status =>
+    interaction.editReply("**Timi verification in progress**\\n" + status)
+  );
   const summary = resultDescription(result);
   if (result.decision === "pass") {
     if (!settings.roleId) {
