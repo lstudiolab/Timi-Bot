@@ -24,7 +24,7 @@ export class Embeds {
     return preview;
   }
   text(x){
-    return `**Embed editor: ${x.name}**\n\nTitle: ${x.title||"—"}\nDescription: ${x.description||"—"}\nColor: #808080\nAuthor: ${x.author||"—"}\nFooter: ${x.footer||"—"}\nFields: ${x.fields.length}\n${x.fields.map((f,i)=>`${i+1}. ${f.name}${f.inline?" (inline)":""}`).join("\n")||"No fields"}\nThumbnail: ${x.thumbnail?"Set":"—"}\nImage: ${x.image?"Set":"—"}\nURL: ${x.url||"—"}\n\nChanges save automatically and update every placed message.`;
+    return `**Embed editor: ${x.name}**\n\nTitle: ${x.title||"—"}\nDescription: ${x.description||"—"}\nColor: #808080\nAuthor: ${x.author||"—"}\nFooter: ${x.footer||"—"}\nFields: ${x.fields.length}\n${x.fields.map((f,i)=>`${i+1}. ${f.name}${f.inline?" (inline)":""}`).join("\n")||"No fields"}\nThumbnail: ${x.thumbnail?"Set":"—"}\nImage: ${x.image?"Set":"—"}\nURL: ${x.url||"—"}\n\nPlaceholders: {user}, {username}, {user_tag}, {user_id}, {server}, {server_id}, {member_count}, {channel}, {channel_name}, {owner}, {owner_id}, {bot}, {bot_name}, {date}, {time}, {timestamp}.\nChanges save automatically and update every placed message.`;
   }
   components(x){
     return [
