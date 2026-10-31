@@ -4,16 +4,16 @@ import { button,row,textInput,modal,respond,deny,requireManager } from "../ui.js
 
 const P=PermissionFlagsBits;
 export class Moderation {
-  constructor(client,store,logger){this.client=client;this.store=store;this.logger=logger;this.spam=new Map();this.warningRetention=30*86400000;this.processingJobs=new Set();this.jobTimer=null;}
+  constructor(client,store,logger){this.client=client;this.store=store;this.logger=logger;this.spam=new Map();this.warningRetention=30*86400000;this.processingJobs=new Set();this.jobTimers=new Map();}
   async resumeJobs(guild){
     const jobs=this.store.data.moderation_jobs[guild.id]||[];
     for(const job of jobs)if(job.status!=="completed"&&job.status!=="cancelled")await this.processJob(guild,job);
     this.scheduleJobs(guild);
   }
   scheduleJobs(guild,delay=30000){
-    if(this.jobTimer)clearTimeout(this.jobTimer);
-    this.jobTimer=setTimeout(()=>this.resumeJobs(guild).catch(error=>this.logger.error("Moderation job recovery failed:",error)),delay);
-    this.jobTimer.unref?.();
+    const existing=this.jobTimers.get(guild.id);if(existing)clearTimeout(existing);
+    const timer=setTimeout(()=>this.resumeJobs(guild).catch(error=>this.logger.error("Moderation job recovery failed:",error)),delay);
+    timer.unref?.();this.jobTimers.set(guild.id,timer);
   }
   async processJob(guild,job){
     if(this.processingJobs.has(job.id)||job.status==="completed"||job.status==="cancelled")return;
