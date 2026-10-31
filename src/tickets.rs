@@ -69,7 +69,8 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
     }
     if custom=="ticket:open"{s.defer(id,t).await?;return open_ticket(s,t,&g,&u).await;}
     if custom=="ticket:close"||custom=="ticket:confirm-close"{
-        s.defer(id,t).await?;
+        // Consume the ephemeral confirmation message instead of creating a second response.
+        if custom=="ticket:confirm-close"{s.defer_update(id,t).await?;}else{s.defer(id,t).await?;}
         let ch=match s.api(Method::GET,&format!("/channels/{c}"),None).await{
             Ok(value)=>value,Err(error)=>{error!("Could not check ticket channel {c}: {error:#}");s.edit_original(t,"Timi could not check this ticket. Try again.").await?;return Ok(());}
         };
@@ -77,7 +78,8 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
         if owner.is_empty(){return s.edit_original(t,"This is not a Timi ticket channel.").await;}
         if u!=owner&&!manager{return s.edit_original(t,"Only the ticket owner or a server manager can close this ticket.").await;}
         if custom=="ticket:close"{return s.edit_original_with_components(t,"Are you sure you want to close this ticket?",vec![row(vec![button("ticket:confirm-close","Yes, close it",4)])]).await;}
-        s.edit_original(t,"Closing this ticket in 5 seconds…").await?;
+        // Remove the confirmation button immediately so repeated clicks cannot queue duplicate close jobs.
+        s.edit_original_with_components(t,"Closing this ticket in 5 seconds…",Vec::new()).await?;
         let cloned=s.clone();let guild=g.clone();let channel=c.clone();let closer=u.clone();
         tokio::spawn(async move{sleep(Duration::from_secs(5)).await;if let Err(error)=close_ticket(&cloned,&guild,&channel,&closer).await{error!("Ticket close failed for channel {}: {error:#}",channel);}});
         return Ok(());
