@@ -71,14 +71,14 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
         "ticket-setup"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}
             s.defer(id,t).await?;
-            match setup(s,&g,&u,t).await{Ok(())=>Ok(()),Err(e)=>{let _=s.edit_original(t,"Setup failed. Check Manage Channels permission and role hierarchy.").await;Err(e)}}
+            match setup(s,&g,&u,t).await{Ok(())=>Ok(()),Err(error)=>{error!("Ticket setup failed in guild {g}: {error:#}");s.edit_original(t,"Setup failed. Check Manage Channels permission and role hierarchy.").await}}
         }
         "ticket-panel"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to publish ticket panels.",true).await;}
             s.defer(id,t).await?;
             match publish_ticket(s,&g,&c,s.ticket(&g)).await{
                 Ok(destination)=>s.edit_original(t,&format!("Ticket panel published or updated in <#{destination}>.")).await,
-                Err(error)=>{let _=s.edit_original(t,"Timi could not publish the ticket panel. Check channel permissions and configuration.").await;Err(error)}
+                Err(error)=>{error!("Ticket panel publication failed in guild {g}: {error:#}");s.edit_original(t,"Timi could not publish the ticket panel. Check channel permissions and configuration.").await}
             }
         }
         "ticket-settings"=>{
@@ -111,8 +111,8 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             let server=match s.api(Method::GET,&format!("/guilds/{g}"),None).await{
                 Ok(server)=>server,
                 Err(error)=>{
-                    let _=s.edit_original(t,"Timi could not check server ownership. Please try again.").await;
-                    return Err(error);
+                    error!("Could not fetch guild {g} while handling verification settings: {error:#}");
+                    return s.edit_original(t,"Timi could not check server ownership. Please try again.").await;
                 }
             };
             if server.get("owner_id").and_then(Value::as_str)!=Some(&u){
@@ -166,7 +166,7 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             s.defer(id,t).await?;
             let server=match s.api(Method::GET,&format!("/guilds/{g}"),None).await{
                 Ok(value)=>value,
-                Err(error)=>{let _=s.edit_original(t,"Timi could not check server ownership. Please try again.").await;return Err(error);}
+                Err(error)=>{error!("Could not fetch guild {g} while opening role picker setup: {error:#}");return s.edit_original(t,"Timi could not check server ownership. Please try again.").await;}
             };
             if server["owner_id"].as_str()!=Some(&u){return s.edit_original(t,"Only the server owner can create role picker menus.").await;}
             s.edit_original_with_components(t,"**Role picker setup**\n\nCreate a self-service role menu. You can publish multiple menus in different channels. Configure its appearance, choose the allowed roles, then publish.",vec![row(vec![button("rolepicker:start","Configure role picker",1)])]).await
