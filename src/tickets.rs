@@ -27,7 +27,7 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
             {"label":"Normal","value":"normal","description":"Standard support request","default":true},
             {"label":"High","value":"high","description":"Needs attention soon"},
             {"label":"Urgent","value":"urgent","description":"Time-sensitive issue"}
-        ]}])]});
+        ]})])]});
         return s.callback(id,t,4,Some(json!({"flags":64,"content":menu["content"],"components":menu["components"]}))).await;
     }
     if custom.starts_with("ticket:priority-select:"){
