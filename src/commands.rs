@@ -23,25 +23,6 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             if !message_id.is_empty(){embed.placements.push(PanelRef{channel_id:c.clone(),message_id});s.save_embed(embed)?;}
             s.edit_original(t,"Embed placed in this channel.").await}
 
-        "create-embed"=>{if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to create embeds.",true).await;}
-            return s.callback(id,t,9,Some(modal("embed:create","Create an embed",vec![
-                input("name","Embed name (no spaces)", "",false,24),
-                input("title","Embed title","",false,256),
-                input("description","Embed description","",true,4000)
-            ]))).await;}
-        "edit-embed"=>{if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to edit embeds.",true).await;}
-            let name=opt_str(&opts,"name").unwrap_or_default();
-            let Some(embed)=s.embed(&g,&name) else{return s.reply(id,t,"No saved embed with that name. Use /create-embed first.",true).await;};
-            return s.callback(id,t,4,Some(json!({"flags":64,"content":embed_editor_text(&embed),"embeds":[embed_payload(&embed)],"components":embed_editor_components(&embed)}))).await;}
-        "place-embed"=>{if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to place embeds.",true).await;}
-            let name=opt_str(&opts,"name").unwrap_or_default();
-            let Some(mut embed)=s.embed(&g,&name) else{return s.reply(id,t,"No saved embed with that name. Use /create-embed first.",true).await;};
-            s.defer(id,t).await?;
-            let message=s.send(&c,json!({"embeds":[embed_payload(&embed)],"allowed_mentions":{"parse":[]}})).await?;
-            let message_id=message["id"].as_str().unwrap_or("").to_owned();
-            if !message_id.is_empty(){embed.placements.retain(|p|p.channel_id!=c);embed.placements.push(PanelRef{channel_id:c.clone(),message_id});s.save_embed(embed)?;}
-            s.edit_original(t,"Embed placed in this channel.").await}
-
         "ticket-setup"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}
             s.defer(id,t).await?;

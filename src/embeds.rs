@@ -60,7 +60,7 @@ async fn embed_modal_submit(s:&Arc<State>,t:&str,v:&Value,custom:&str,fields:&Ha
     }
     let name=embed_key_name(custom);
     let Some(mut e)=s.embed(&g,name) else{return s.edit_original(t,"This saved embed no longer exists.").await;};
-    if e.creator_id!=u{return s.edit_original(t,"Only the original creator can edit this embed.").await;}
+    
     match custom.split(':').nth(1).unwrap_or(""){
         "content"=>{e.title=fields.get("title").cloned().unwrap_or_default().trim().into();e.description=fields.get("description").cloned().unwrap_or_default().trim().into();}
         "style"=>{
