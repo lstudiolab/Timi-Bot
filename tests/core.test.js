@@ -66,3 +66,32 @@ test("legacy configuration files are imported without overwriting new data",()=>
     assert.equal(reloaded.ticket("123456789012345678").panel_title,"Legacy Support");
   }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+import { LibraryManager } from "../src/module-manager.js";
+import { LIBRARIES, normalizeLibraryName } from "../src/libraries/index.js";
+
+test("Timi exposes three concrete first-party libraries",()=>{
+  assert.deepEqual(Object.keys(LIBRARIES),["Moderation","Support","Foundation"]);
+  for(const library of Object.values(LIBRARIES)){
+    assert.equal(typeof library.create,"function");
+    assert.ok(library.systems.length>0);
+    assert.ok(library.description.length>20);
+  }
+  assert.equal(normalizeLibraryName(" moderation "),"Moderation");
+  assert.equal(normalizeLibraryName("Support"),"Support");
+  assert.equal(normalizeLibraryName("Unknown"),null);
+});
+test("library installation is isolated per server and preserves data",()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),"timi-libraries-"));
+  try{
+    const store=new Store(dir,quiet),manager=new LibraryManager(store,quiet);
+    store.ticket("guild-a").panel_title="Saved support";store.save();
+    assert.equal(manager.install("guild-a","Support").ok,true);
+    assert.equal(manager.installed("guild-a","Support"),true);
+    assert.equal(manager.installed("guild-b","Support"),false);
+    assert.equal(manager.install("guild-a","Support").ok,false);
+    assert.equal(manager.uninstall("guild-a","Support").ok,true);
+    assert.equal(manager.installed("guild-a","Support"),false);
+    assert.equal(new Store(dir,quiet).ticket("guild-a").panel_title,"Saved support");
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
