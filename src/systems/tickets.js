@@ -122,7 +122,7 @@ export class Tickets {
       note=` A private staff thread was created: <#${thread.id}>.`;
     } catch(e) { note=" The ticket is open, but Timi could not create its private staff thread. Check thread permissions."; this.logger.warn("Ticket staff thread failed:",e.message); }
     await this.log(guild,`Ticket opened. Member: <@${i.user.id}>. Channel: <#${ch.id}>.`);
-    return respond(i,`Your ticket has been created: <#${ch.id}>.${note}`);
+    return respond(i,`Your ticket is ready: <#${ch.id}>`);
   }
   async log(guild,content) {
     const x=this.store.mods(guild.id);
