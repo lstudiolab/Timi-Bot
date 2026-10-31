@@ -71,7 +71,7 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
     if custom=="ticket:close"||custom=="ticket:confirm-close"{
         s.defer(id,t).await?;
         let ch=match s.api(Method::GET,&format!("/channels/{c}"),None).await{
-            Ok(value)=>value,Err(error)=>{let _=s.edit_original(t,"Timi could not check this ticket. Try again.");return Err(error);}
+            Ok(value)=>value,Err(error)=>{error!("Could not check ticket channel {c}: {error:#}");s.edit_original(t,"Timi could not check this ticket. Try again.").await?;return Ok(());}
         };
         let owner=ch["topic"].as_str().unwrap_or("").strip_prefix("timi-ticket-owner:").unwrap_or("").to_owned();
         if owner.is_empty(){return s.edit_original(t,"This is not a Timi ticket channel.").await;}
@@ -98,7 +98,7 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
             s.defer(id,t).await?;
             match publish_ticket(s,&g,&c,x).await{
                 Ok(dest)=>s.edit_original(t,&format!("Ticket panel published or updated in <#{dest}>.")).await,
-                Err(error)=>{let _=s.edit_original(t,"Timi could not publish the ticket panel. Check channel permissions.");Err(error)}
+                Err(error)=>{error!("Could not publish ticket panel in guild {g}: {error:#}");s.edit_original(t,"Timi could not publish the ticket panel. Check channel permissions.").await}
             }
         }
         _=>Ok(())
