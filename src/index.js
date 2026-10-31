@@ -1,6 +1,6 @@
 import { Client, Events, GatewayIntentBits, Partials, REST, Routes } from "discord.js";
 import { loadConfig, createLogger } from "./config.js";
-import { commandData } from "./commands.js";
+import { commandsForLibraries } from "./commands.js";
 import { Store } from "./store.js";
 import { LibraryManager } from "./module-manager.js";
 import { LIBRARIES } from "./libraries/index.js";
@@ -10,10 +10,14 @@ const client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.Gui
 const manager=new LibraryManager(store,logger),context={client,store,logger};
 const foundation=LIBRARIES.Foundation.create(context);context.foundation=foundation;
 const libraries=Object.fromEntries(Object.entries(LIBRARIES).map(([name,definition])=>[name,definition.create(context)]));
-async function registerCommands(){
- const rest=new REST({version:"10"}).setToken(config.token);
- const route=config.guildId?Routes.applicationGuildCommands(config.clientId,config.guildId):Routes.applicationCommands(config.clientId);
- const registered=await rest.put(route,{body:commandData});logger.info(`Registered ${registered.length} slash commands.`);
+const rest=new REST({version:"10"}).setToken(config.token);
+async function syncGuildCommands(guildId){
+ const installed=store.data.installed_libraries[guildId]||[];
+ const body=commandsForLibraries(installed);
+ const route=Routes.applicationGuildCommands(config.clientId,guildId);
+ const registered=await rest.put(route,{body});
+ logger.info(`Synced ${registered.length} slash commands for guild ${guildId}.`);
+ return registered;
 }
 function commandLibrary(n){if(n.startsWith("ticket-"))return "Support";if(["moderation-settings","automod-word"].includes(n))return "Moderation";if(["verify-settings","verify-panel","setup-role-picker","create-embed","edit-embed","place-embed","ping","server-info","user-info","avatar","welcome-settings"].includes(n))return "Foundation";return null;}
 function componentLibrary(id){if(id.startsWith("ticket:"))return "Support";if(id.startsWith("modpanel:")||id.startsWith("botguard:"))return "Moderation";if(id.startsWith("verify:")||id.startsWith("rolepicker:")||id.startsWith("embed:"))return "Foundation";return null;}
@@ -27,7 +31,8 @@ async function coreCommand(i){
   if(i.guild.ownerId!==i.user.id)return respond(i,"Only the server owner can uninstall Timi libraries.");
   const result=manager.uninstall(i.guildId,i.options.getString("libraryname"));
   if(!result.ok)return respond(i,result.error);
-  return respond(i,`**${result.library.name}** is now disabled in this server. Its saved configuration and records have been preserved. Commands and controls from this library will remain inactive until it is installed again.`);
+  await syncGuildCommands(i.guildId);
+  return respond(i,`**${result.library.name}** is now disabled in this server. Its slash commands have been removed; saved configuration and records are preserved.`);
  }
  if(i.commandName==="install-library"){
   if(i.guild.ownerId!==i.user.id)return respond(i,"Only the server owner can install Timi libraries.");
@@ -51,8 +56,11 @@ async function handleInteraction(i){
  return libraries[required].handleInteraction(i);
 }
 client.once(Events.ClientReady,async ready=>{
- logger.info(`Logged in as ${ready.user.tag}`);try{await registerCommands();}catch(error){logger.error("Command registration failed:",error);}
- for(const guild of ready.guilds.cache.values())for(const [name,library] of Object.entries(libraries))if(manager.installed(guild.id,name)&&library.ready)await library.ready(guild);
+ logger.info(`Logged in as ${ready.user.tag}`);
+ for(const guild of ready.guilds.cache.values()){
+  try{await syncGuildCommands(guild.id);}catch(error){logger.error(`Command sync failed for guild ${guild.id}:`,error);}
+  for(const [name,library] of Object.entries(libraries))if(manager.installed(guild.id,name)&&library.ready)await library.ready(guild);
+ }
 });
 client.on(Events.InteractionCreate,async i=>{try{await handleInteraction(i);}catch(error){logger.error(`Interaction ${i.id} failed:`,error);if(!i.isRepliable())return;const p={content:"Timi could not complete that action. Check bot permissions and try again.",components:[],allowedMentions:{parse:[]}};if(i.deferred||i.replied)await i.editReply(p).catch(()=>{});else await i.reply({...p,ephemeral:true}).catch(()=>{});}});
 client.on(Events.MessageCreate,m=>{if(manager.installed(m.guildId,"Moderation"))libraries.Moderation.messageCreate(m).catch(e=>logger.error("Moderation message processing failed:",e));});
