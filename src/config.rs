@@ -419,10 +419,10 @@ impl State {
             .map_err(|_|anyhow!("interaction acknowledgement lock poisoned"))?
             .contains(id);
         if already_acknowledged{return Ok(());}
-        // Acknowledge with a real ephemeral message instead of Discord's
-        // deferred spinner. This prevents the client from showing its generic
-        // interaction-failed state while the handler is still working.
-        self.callback(id,t,4,Some(json!({"content":"Working…","flags":64}))).await?;
+        // Acknowledge immediately with Discord's deferred response. The
+        // user-facing Working… text is only shown when the operation begins
+        // its first response edit, not on every interaction acknowledgement.
+        self.callback(id,t,5,Some(json!({"flags":64}))).await?;
         self.deferred_at.lock()
             .map_err(|_|anyhow!("deferred interaction timing lock poisoned"))?
             .insert(t.to_owned(),(std::time::Instant::now(),Duration::from_secs(5)));

@@ -173,7 +173,7 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
         // shared five-second thinking minimum, then updates the response and
         // performs the close without keeping the gateway event handler occupied.
         tokio::spawn(async move{
-            if let Err(error)=cloned.edit_original(&interaction_token,"Closing ticket...").await{
+            if let Err(error)=cloned.edit_original(&interaction_token,"Working…").await{
                 error!("Could not update the deferred close response for ticket {channel}: {error:#}");
                 if let Ok(mut runtime)=cloned.runtime.lock(){runtime.closing_tickets.remove(&key);}
                 return;
