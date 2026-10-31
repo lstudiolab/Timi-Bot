@@ -16,6 +16,42 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
     if custom=="ticket:wizard-continue"{let x=s.ticket(&g);return s.callback(id,t,9,Some(modal("ticket:wizard-stage2","Ticket setup - 2 of 2",vec![
         input("ticket-message","Message shown inside tickets",&x.ticket_message,true,1000),optional_input("transcript-channel","Transcript channel ID (optional)",&x.transcript_channel_id,false,22),
         optional_input("panel-channel","Panel channel ID (blank = this channel)",&x.panel_channel_id,false,22)]))).await;}
+    if custom=="ticket:priority"{
+        let roles=v.pointer("/member/roles").and_then(Value::as_array).cloned().unwrap_or_default();
+        let staff=!s.ticket(&g).support_role_id.is_empty()&&roles.iter().any(|r|r.as_str()==Some(s.ticket(&g).support_role_id.as_str()));
+        if !staff&&!manager{return s.reply(id,t,"Only support staff can change ticket priority.",true).await;}
+        let message_id=v.pointer("/message/id").and_then(Value::as_str).unwrap_or("");
+        if message_id.is_empty(){return s.reply(id,t,"Could not identify this ticket message.",true).await;}
+        let menu=json!({"content":"Choose the priority for this ticket.","components":[row(vec![{"type":3,"custom_id":format!("ticket:priority-select:{message_id}"),"placeholder":"Select priority","min_values":1,"max_values":1,"options":[
+            {"label":"Low","value":"low","description":"Routine request"},
+            {"label":"Normal","value":"normal","description":"Standard support request","default":true},
+            {"label":"High","value":"high","description":"Needs attention soon"},
+            {"label":"Urgent","value":"urgent","description":"Time-sensitive issue"}
+        ]}])]});
+        return s.callback(id,t,4,Some(json!({"flags":64,"content":menu["content"],"components":menu["components"]}))).await;
+    }
+    if custom.starts_with("ticket:priority-select:"){
+        let roles=v.pointer("/member/roles").and_then(Value::as_array).cloned().unwrap_or_default();
+        let settings=s.ticket(&g);
+        let staff=!settings.support_role_id.is_empty()&&roles.iter().any(|r|r.as_str()==Some(settings.support_role_id.as_str()));
+        if !staff&&!manager{return s.reply(id,t,"Only support staff can change ticket priority.",true).await;}
+        let priority=v.pointer("/data/values/0").and_then(Value::as_str).unwrap_or("");
+        let (label,color)=match priority{"low"=>("Low",0x57F287),"normal"=>("Normal",0x5865F2),"high"=>("High",0xFEE75C),"urgent"=>("Urgent",0xED4245),_=>return s.reply(id,t,"Choose a valid priority level.",true).await};
+        let message_id=custom.strip_prefix("ticket:priority-select:").unwrap_or("");
+        if !snowflake(message_id){return s.reply(id,t,"This ticket priority control is invalid.",true).await;}
+        s.defer(id,t).await?;
+        let mut message=s.api(Method::GET,&format!("/channels/{c}/messages/{message_id}"),None).await?;
+        let embed=message.pointer_mut("/embeds/0").ok_or_else(||anyhow!("Ticket embed is missing"))?;
+        embed["color"]=json!(color);
+        let fields=embed["fields"].as_array_mut();
+        if let Some(fields)=fields{
+            if let Some(field)=fields.iter_mut().find(|f|f["name"].as_str()==Some("Priority")){
+                field["value"]=json!(label);
+            }else{fields.push(json!({"name":"Priority","value":label,"inline":true}));}
+        }else{embed["fields"]=json!([{"name":"Priority","value":label,"inline":true}]);}
+        s.api(Method::PATCH,&format!("/channels/{c}/messages/{message_id}"),Some(json!({"embeds":message["embeds"]}))).await?;
+        return s.edit_original(t,&format!("Ticket priority set to **{label}**.")).await;
+    }
     if custom=="ticket:open"{s.defer(id,t).await?;return open_ticket(s,t,&g,&u).await;}
     if custom=="ticket:close"||custom=="ticket:confirm-close"{
         s.defer(id,t).await?;
@@ -106,9 +142,45 @@ async fn open_ticket(s:&Arc<State>,t:&str,g:&str,u:&str)->Result<()>{
     let created=s.api(Method::POST,&format!("/guilds/{g}/channels"),Some(json!({"name":name.chars().take(100).collect::<String>(),"type":0,"parent_id":category,
         "topic":format!("timi-ticket-owner:{u}"),"permission_overwrites":overwrites,"reason":"Timi ticket opened by member"}))).await?;
     let id=created["id"].as_str().unwrap_or("");
-    s.send(id,json!({"content":format!("<@{u}>"),"embeds":[{"color":8421504,"title":x.panel_title,"description":x.ticket_message}],
-        "components":[row(vec![button("ticket:close",&x.close_label,2)])],"allowed_mentions":{"users":[u]}})).await?;
-    s.edit_original(t,&format!("Your ticket has been created: <#{id}>")).await
+    let ticket_message=s.send(id,json!({"content":format!("<@{u}>"),"embeds":[{"color":0x5865F2,"title":x.panel_title,"description":x.ticket_message,"fields":[{"name":"Priority","value":"Normal","inline":true}]}],
+        "components":[row(vec![button("ticket:close",&x.close_label,2),button("ticket:priority","Set priority",1)])],"allowed_mentions":{"users":[u]}})).await?;
+    let ticket_message_id=ticket_message["id"].as_str().unwrap_or("");
+    let thread_result=s.api(Method::POST,&format!("/channels/{id}/threads"),Some(json!({"name":format!("staff-{}",name.chars().take(80).collect::<String>()),"type":12,"auto_archive_duration":1440,"invitable":false}))).await;
+    let thread_note=match thread_result{
+        Ok(thread)=>{
+            let thread_id=thread["id"].as_str().unwrap_or("");
+            let _=s.send(thread_id,json!({"content":format!("Private staff discussion for <#{id}>. The ticket owner cannot see this thread.")})).await;
+            if !x.support_role_id.is_empty(){
+                let mut after=String::new();
+                loop{
+                    let path=if after.is_empty(){format!("/guilds/{g}/members?limit=1000")}else{format!("/guilds/{g}/members?limit=1000&after={after}")};
+                    let page=match s.api(Method::GET,&path,None).await{Ok(value)=>value,Err(error)=>{warn!("Could not list support members for private ticket thread {thread_id}: {error:#}");break;}};
+                    let Some(members)=page.as_array() else{break;};
+                    if members.is_empty(){break;}
+                    let mut last_id=String::new();
+                    for member in members{
+                        let member_id=member.pointer("/user/id").and_then(Value::as_str).unwrap_or("");
+                        last_id=member_id.to_owned();
+                        let has_role=member["roles"].as_array().is_some_and(|roles|roles.iter().any(|role|role.as_str()==Some(x.support_role_id.as_str())));
+                        if has_role&&!member_id.is_empty(){
+                            if let Err(error)=s.api(Method::PUT,&format!("/channels/{thread_id}/thread-members/{member_id}"),None).await{
+                                warn!("Could not add support member {member_id} to ticket thread {thread_id}: {error:#}");
+                            }
+                        }
+                    }
+                    if members.len()<1000||last_id.is_empty(){break;}
+                    after=last_id;
+                }
+            }
+            format!(" A private staff thread was created: <#{thread_id}>.")
+        }
+        Err(error)=>{
+            warn!("Ticket {id} was created, but its private staff thread could not be created: {error:#}");
+            " The ticket is open, but Timi could not create its private staff thread. Check Create Private Threads and Send Messages in Threads permissions.".into()
+        }
+    };
+    let _=ticket_message_id;
+    s.edit_original(t,&format!("Your ticket has been created: <#{id}>.{thread_note}")).await
 }
 async fn close_ticket(s:&State,g:&str,c:&str)->Result<()>{
     let settings=s.ticket(g);

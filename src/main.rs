@@ -28,7 +28,7 @@ const MANAGE_GUILD: u64 = 1 << 5;
 const MANAGE_ROLES: u64 = 1 << 28;
 const KICK: u64 = 1 << 1;
 const BAN: u64 = 1 << 2;
-const MANAGE_MESSAGES: u64 = 1 << 13;
+const MANAGE_MESSAGES: u64 = 1 << 13;\nconst CREATE_PRIVATE_THREADS: u64 = 1 << 36;\nconst SEND_MESSAGES_IN_THREADS: u64 = 1 << 38;
 const MODERATE: u64 = 1 << 40;
 const HISTORY: u64 = 1 << 16;
 const ATTACH: u64 = 1 << 15;
