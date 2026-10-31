@@ -1,10 +1,14 @@
 -- Luvi can execute this entry point with LuaJIT's standard require loader.
 -- Lit installs dependencies under ./deps, so include both single-file packages
 -- (deps/name.lua) and directory packages (deps/name/init.lua) before imports.
-local dependency_paths = "./deps/?.lua;./deps/?/init.lua;"
-if not package.path:find("./deps/?.lua", 1, true) then
-  package.path = dependency_paths .. package.path
+local function add_module_path(pattern)
+  if not package.path:find(pattern, 1, true) then
+    package.path = pattern .. ";" .. package.path
+  end
 end
+
+add_module_path("./deps/?.lua")
+add_module_path("./deps/?/init.lua")
 
 local config_module = require("timi.config")
 local Store = require("timi.store")
