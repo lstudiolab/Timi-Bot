@@ -21,8 +21,7 @@ export const commandData=[
   new SlashCommandBuilder().setName("place-embed").setDescription("Place a saved embed in this channel.").setDefaultMemberPermissions(manageGuild)
     .addStringOption(o=>o.setName("name").setDescription("Saved embed name").setRequired(true).setMaxLength(24)),
   new SlashCommandBuilder().setName("edit-embed").setDescription("Edit a saved embed.").setDefaultMemberPermissions(manageGuild)
-    .addStringOption(o=>o.setName("name").setDescription("Saved embed name").setRequired(true).setMaxLength(24))
-
+    .addStringOption(o=>o.setName("name").setDescription("Saved embed name").setRequired(true).setMaxLength(24)),
   new SlashCommandBuilder().setName("ping").setDescription("Show Timi gateway latency."),
   new SlashCommandBuilder().setName("server-info").setDescription("Show information about this server."),
   new SlashCommandBuilder().setName("user-info").setDescription("Show information about a server member.")
