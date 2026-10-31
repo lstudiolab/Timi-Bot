@@ -1,5 +1,6 @@
 import { ChannelType, EmbedBuilder } from "discord.js";
 import { respond, requireManager } from "../ui.js";
+import { renderTemplate, TEMPLATE_PLACEHOLDERS } from "../utils.js";
 
 export class Foundation {
   constructor(client,store,logger){this.client=client;this.store=store;this.logger=logger;}
@@ -39,13 +40,11 @@ export class Foundation {
       if(welcomeMessage!==null)s.welcome_message=welcomeMessage;
       if(goodbyeMessage!==null)s.goodbye_message=goodbyeMessage;
       this.store.save();
-      return respond(i,"Welcome and goodbye settings saved. Welcome channel: "+(s.welcome_channel_id?"<#"+s.welcome_channel_id+">":"Disabled")+". Goodbye channel: "+(s.goodbye_channel_id?"<#"+s.goodbye_channel_id+">":"Disabled")+". Placeholders: {user}, {username}, {server}, {member_count}.");
+      return respond(i,"Welcome and goodbye settings saved. Welcome channel: "+(s.welcome_channel_id?"<#"+s.welcome_channel_id+">":"Disabled")+". Goodbye channel: "+(s.goodbye_channel_id?"<#"+s.goodbye_channel_id+">":"Disabled")+". Available placeholders: "+TEMPLATE_PLACEHOLDERS.join(", ")+".");
     }
   }
   render(template,member){
-    return String(template||"").replaceAll("{user}",`<@${member.id}>`)
-      .replaceAll("{username}",member.user.username).replaceAll("{server}",member.guild.name)
-      .replaceAll("{member_count}",String(member.guild.memberCount));
+    return renderTemplate(template,{guild:member.guild,member,user:member.user,client:this.client});
   }
   async memberAdd(member){
     const s=this.settings(member.guild.id);if(!s.welcome_channel_id)return;
