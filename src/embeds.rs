@@ -13,7 +13,7 @@ fn embed_payload(e:&SavedEmbed)->Value{
     v
 }
 fn embed_editor_text(e:&SavedEmbed)->String{
-    format!("**Embed editor: {}**\n\nTitle: {}\nDescription: {}\nColor: #{:06X}\nAuthor: {}\nFooter: {}\nFields: {}\nThumbnail: {}\nImage: {}\nURL: {}\n\nChanges save automatically and update every message placed with /place-embed.",
+    format!("**Embed editor: {}**\n\nTitle: {}\nDescription: {}\nColor: #{:06X}\nAuthor: {}\nFooter: {}\nFields: {}\n{}\nThumbnail: {}\nImage: {}\nURL: {}\n\nChanges save automatically and update every message placed with /place-embed.",
         e.name,if e.title.is_empty(){"—"}else{&e.title},if e.description.is_empty(){"—"}else{&e.description},e.color,
         if e.author.is_empty(){"—"}else{&e.author},if e.footer.is_empty(){"—"}else{&e.footer},e.fields.len(),
         if e.fields.is_empty(){ "No fields".to_owned() }else{e.fields.iter().enumerate().map(|(i,f)|format!("{}. {}{}",i+1,f.name,if f.inline{" (inline)"}else{""})).collect::<Vec<_>>().join("\\n")},
