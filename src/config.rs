@@ -390,6 +390,15 @@ impl State {
         Ok(())
     }
     async fn reply(&self,id:&str,t:&str,text:&str,ephemeral:bool)->Result<()> {
+        // A handler may discover a validation or permission error after it has
+        // already deferred the interaction. Discord rejects a second initial
+        // callback in that case; update the acknowledged response instead.
+        let already_acknowledged=self.callback_attempts.lock()
+            .map_err(|_|anyhow!("interaction callback lock poisoned"))?
+            .contains(id);
+        if already_acknowledged {
+            return self.edit_original(t,text).await;
+        }
         self.callback(id,t,4,Some(json!({"content":text,"flags":if ephemeral{64}else{0}}))).await
     }
     async fn defer(&self,id:&str,t:&str)->Result<()> {self.callback(id,t,5,Some(json!({"flags":64}))).await}
