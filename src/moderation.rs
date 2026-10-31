@@ -24,10 +24,11 @@ async fn mod_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Resul
     // response, which can fail and leave the panel showing a generic error.
     if custom=="modpanel:enable"||custom=="modpanel:disable"{
         next.enabled=custom=="modpanel:enable";
-        // Acknowledge the component interaction before doing synchronous disk I/O.
-        // Discord invalidates unacknowledged interactions after roughly three seconds.
+        // Queue the setting in memory before acknowledging the component.
+        // Disk persistence is debounced and logged independently, so a successful
+        // Discord message update cannot later be replaced by a generic error.
+        s.queue_mods(&g,next.clone())?;
         s.callback(id,t,7,Some(json!({"content":mod_text(&next),"components":mod_components(&next)}))).await?;
-        s.save_mods(&g,next)?;
         return Ok(());
     }
     // Acknowledge other component clicks before saving or making REST calls.

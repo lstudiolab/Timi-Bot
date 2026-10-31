@@ -283,6 +283,11 @@ impl State {
         self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?.role_picker_menus.insert(menu.id.clone(),menu);self.persist()
     }
     fn save_ticket(&self,g:&str,v:TicketSettings)->Result<()> { self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?.tickets.insert(g.into(),v);self.persist() }
+    fn queue_mods(self:&Arc<Self>,g:&str,v:ModSettings)->Result<()> {
+        self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?.moderation.insert(g.into(),v);
+        self.schedule_persist();
+        Ok(())
+    }
     fn save_mods(&self,g:&str,v:ModSettings)->Result<()> { self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?.moderation.insert(g.into(),v);self.persist() }
     fn save_verify(&self,g:&str,v:VerifySettings)->Result<()> { self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?.verification.insert(g.into(),v);self.persist() }
     fn update_member<F:FnOnce(&mut MemberRecord)>(&self,g:&str,u:&str,f:F)->Result<()> {
