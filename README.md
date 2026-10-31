@@ -34,9 +34,13 @@ The package manifest installs `luvit/coro-http` and `luvit/coro-websocket`.
 
 ## Termux setup (Android)
 
-The official Termux package repository provides the Luvit runtime and Lit package manager. From the Timi repository directory, run:
+The official Termux package repository provides the Luvit runtime and Lit package manager. On Android, install Git, clone Timi, and run the setup script:
 
 ```sh
+pkg update
+pkg install -y git
+git clone https://github.com/lstudiolab/Timi-Bot.git
+cd Timi-Bot
 bash scripts/termux-setup.sh
 ```
 
