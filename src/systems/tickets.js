@@ -189,10 +189,10 @@ export class Tickets {
         try { await this.transcript(g,ch); } catch(e) { this.logger.warn("Ticket transcript failed:",e.message); }
         await this.log(g,`Ticket closed. Channel: <#${ch.id}>. Closed by <@${i.user.id}>.`);
         await ch.delete("Ticket closed");
-        await i.editReply({content:"Ticket closed.",components:[]}).catch(()=>{});
+        await respond(i,"Ticket closed.",[]).catch(()=>{});
       } catch(e) {
         this.logger.error("Ticket close failed:",e);
-        await i.editReply({content:"Timi could not close this ticket. Check the bot's channel permissions and try again.",components:[]}).catch(()=>{});
+        await respond(i,"Timi could not close this ticket. Check the bot's channel permissions and try again.",[]).catch(()=>{});
       } finally { this.closing.delete(key); }
       return;
     }
