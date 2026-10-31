@@ -33,8 +33,19 @@ export async function startWorking(interaction){
       workAnimations.delete(interaction);
       if(error?.code!==10062) interaction.client?.logger?.warn?.("Working indicator update failed:",error.message);
     });
-  },1200);
+  },2200);
   workAnimations.set(interaction,timer);
+}
+export async function finishWorking(interaction){
+  const timer=workAnimations.get(interaction);
+  if(!timer)return false;
+  clearInterval(timer);
+  workAnimations.delete(interaction);
+  workStarted.delete(interaction);
+  await interaction.editReply({content:"Timi could not complete that action. The handler returned without a response. Please try again.",components:[],embeds:[],allowedMentions:{parse:[]}}).catch(error=>{
+    console.error("Could not finish unanswered interaction:",error);
+  });
+  return true;
 }
 export async function respond(interaction,content,components=[],embeds=[]){
   const payload={content:content??null,components,embeds,allowedMentions:{parse:[]}};
