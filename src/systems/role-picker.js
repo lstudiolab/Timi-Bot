@@ -24,6 +24,7 @@ export class RolePicker {
       ]));
     }
     if(i.customId.startsWith("rolepicker:publish:")){
+      if(!await requireOwner(i))return;
       const id=i.customId.slice("rolepicker:publish:".length),draft=this.store.data.role_picker_drafts[id];
       if(!draft||draft.guild_id!==i.guildId||!draft.roles?.length)return deny(i,"Choose at least one role before publishing.");
       const roles=[];
@@ -76,6 +77,7 @@ export class RolePicker {
     return respond(i,`**${draft.title}**\n${draft.description}\n\nChoose which roles members can select. ${count} assignable roles were found. Select up to 25.`,[row(menu)]);
   }
   async setupRoles(i){
+    if(!await requireOwner(i))return;
     const id=i.customId.slice("rolepicker:setup-roles:".length),draft=this.store.data.role_picker_drafts[id];
     if(!draft||draft.guild_id!==i.guildId)return deny(i,"This setup has expired. Run /setup-role-picker again.");
     draft.roles=[...i.values];this.store.save();
