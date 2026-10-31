@@ -8,9 +8,16 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}
             let target=opt_str(&opts,"member").unwrap_or_default();let reason=opt_str(&opts,"reason").unwrap_or_else(||"No reason provided".into());
             if !snowflake(&target)||target==u{return s.reply(id,t,"Choose a valid member other than yourself.",true).await;}
-            let mut store=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;let cases=store.moderation_cases.entry(g.clone()).or_default();let case_id=cases.last().and_then(|x|x["id"].as_u64()).unwrap_or(0)+1;
-            cases.push(json!({"id":case_id,"type":"warning","user_id":target,"moderator_id":u,"reason":reason,"created_at":now()}));drop(store);s.persist()?;
-            log_to(s,&g,&s.mods(&g).log_channel_id,&format!("Warning #{case_id}: <@{target}> — {reason} (moderator <@{u}>)")).await;
+            let case_id={
+                let mut store=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;
+                let cases=store.moderation_cases.entry(g.clone()).or_default();
+                let case_id=cases.last().and_then(|x|x["id"].as_u64()).unwrap_or(0)+1;
+                cases.push(json!({"id":case_id,"type":"warning","user_id":target,"moderator_id":u,"reason":reason,"created_at":now()}));
+                case_id
+            };
+            s.persist()?;
+            let log_channel=s.mods(&g).log_channel_id;
+            log_to(s,&g,&log_channel,&format!("Warning #{case_id}: <@{target}> — {reason} (moderator <@{u}>)")).await;
             s.reply(id,t,&format!("Warning #{case_id} recorded for <@{target}>."),true).await
         }
         "warnings"=>{

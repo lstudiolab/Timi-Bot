@@ -78,8 +78,8 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
         if u!=owner&&!manager{return s.edit_original(t,"Only the ticket owner or a server manager can close this ticket.").await;}
         if custom=="ticket:close"{return s.edit_original_with_components(t,"Are you sure you want to close this ticket?",vec![row(vec![button("ticket:confirm-close","Yes, close it",4)])]).await;}
         s.edit_original(t,"Closing this ticket in 5 seconds…").await?;
-        let cloned=s.clone();let guild=g.clone();let channel=c.clone();
-        tokio::spawn(async move{sleep(Duration::from_secs(5)).await;close_ticket(&cloned,&guild,&channel).await;});
+        let cloned=s.clone();let guild=g.clone();let channel=c.clone();let closer=u.clone();
+        tokio::spawn(async move{sleep(Duration::from_secs(5)).await;if let Err(error)=close_ticket(&cloned,&guild,&channel,&closer).await{error!("Ticket close failed for channel {}: {error:#}",channel);}});
         return Ok(());
     }
     if !manager{return s.reply(id,t,"You need Manage Server permission to configure tickets.",true).await;}
@@ -195,9 +195,19 @@ async fn open_ticket(s:&Arc<State>,t:&str,g:&str,u:&str)->Result<()>{
         }
     };
     let _=ticket_message_id;
+    ticket_log(s,g,&format!("Ticket opened. Member: <@{u}>. Channel: <#{id}>.")).await;
     s.edit_original(t,&format!("Your ticket has been created: <#{id}>.{thread_note}")).await
 }
-async fn close_ticket(s:&State,g:&str,c:&str)->Result<()>{
+async fn ticket_log(s:&State,g:&str,message:&str){
+    let settings=s.mods(g);
+    let channel=if settings.log_channel_id.is_empty(){find_channel(s,g,"timi").await.unwrap_or_default()}else{settings.log_channel_id};
+    if !channel.is_empty(){
+        if let Err(error)=s.send(&channel,json!({"content":message,"allowed_mentions":{"parse":[]}})).await{
+            warn!("Could not write ticket audit log in guild {}: {error:#}",g);
+        }
+    }else{warn!("Ticket audit event in guild {} was not logged: no moderation log channel or #timi channel exists.",g);}
+}
+async fn close_ticket(s:&State,g:&str,c:&str,closer:&str)->Result<()>{
     let settings=s.ticket(g);
     if !settings.transcript_channel_id.is_empty(){
         let mut messages=Vec::<Value>::new();
@@ -252,6 +262,7 @@ async fn close_ticket(s:&State,g:&str,c:&str)->Result<()>{
             let _=s.send(&settings.transcript_channel_id,json!({"content":format!("Transcript for ticket <#{c}>\n{chunk}{suffix}"),"allowed_mentions":{"parse":[]}})).await;
         }
     }
+    ticket_log(s,g,&format!("Ticket closed. Channel: <#{c}>. Closed by: <@{closer}>.")).await;
     s.api(Method::DELETE,&format!("/channels/{c}"),None).await?;Ok(())
 }
 async fn modal_submit(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
