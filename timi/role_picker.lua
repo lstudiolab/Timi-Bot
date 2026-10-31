@@ -1,4 +1,4 @@
-local util = require("timi.util")
+local util = require("./util")
 local R = {}
 R.__index = R
 
