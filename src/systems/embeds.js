@@ -11,6 +11,17 @@ export class Embeds {
     if(x.fields?.length)e.addFields(x.fields.map(f=>({name:f.name,value:f.value,inline:!!f.inline})));
     return e;
   }
+  editorPreview(x){
+    const preview=new EmbedBuilder().setColor(0x808080)
+      .setTitle(x.title||"Untitled embed")
+      .setDescription(x.description||"Your embed description will appear here.");
+    const avatar=this.client.user?.displayAvatarURL({extension:"png",size:256});
+    if(avatar)preview.setThumbnail(avatar);
+    if(x.author)preview.setAuthor({name:x.author});
+    if(x.footer)preview.setFooter({text:x.footer});
+    if(x.fields?.length)preview.addFields(x.fields.slice(0,25).map(f=>({name:f.name,value:f.value,inline:!!f.inline})));
+    return preview;
+  }
   text(x){
     return `**Embed editor: ${x.name}**\n\nTitle: ${x.title||"—"}\nDescription: ${x.description||"—"}\nColor: #808080\nAuthor: ${x.author||"—"}\nFooter: ${x.footer||"—"}\nFields: ${x.fields.length}\n${x.fields.map((f,i)=>`${i+1}. ${f.name}${f.inline?" (inline)":""}`).join("\n")||"No fields"}\nThumbnail: ${x.thumbnail?"Set":"—"}\nImage: ${x.image?"Set":"—"}\nURL: ${x.url||"—"}\n\nChanges save automatically and update every placed message.`;
   }
@@ -37,7 +48,7 @@ export class Embeds {
     ]));
     const name=i.options.getString("name").toLowerCase(),x=this.store.embed(i.guildId,name);
     if(!x)return deny(i,"No saved embed with that name. Use /create-embed first.");
-    if(i.commandName==="edit-embed")return respond(i,this.text(x),this.components(x));
+    if(i.commandName==="edit-embed")return respond(i,this.text(x),this.components(x),[this.editorPreview(x)]);
     if(i.commandName==="place-embed"){
       const sent=await i.channel.send({embeds:[this.payload(x)],allowedMentions:{parse:[]}});
       x.placements.push({channel_id:i.channelId,message_id:sent.id});this.store.saveEmbed(x);
@@ -67,7 +78,7 @@ export class Embeds {
       if(this.store.embed(i.guildId,name))return deny(i,"An embed with that name already exists. Use /edit-embed.");
       const x={guild_id:i.guildId,name,creator_id:i.user.id,title:fields.title,description:fields.description,color:0x808080,
         author:"",footer:"",thumbnail:"",image:"",url:"",fields:[],placements:[]};
-      this.store.saveEmbed(x);return respond(i,this.text(x),this.components(x));
+      this.store.saveEmbed(x);return respond(i,this.text(x),this.components(x),[this.editorPreview(x)]);
     }
     const [,action,name]=i.customId.split(":"),x=this.store.embed(i.guildId,name);
     if(!x)return deny(i,"This saved embed no longer exists.");
@@ -86,7 +97,7 @@ export class Embeds {
       x.fields.splice(index,1);
     }else return deny(i,"This embed form is no longer available.");
     this.store.saveEmbed(x);await this.refresh(x);
-    return respond(i,this.text(x),this.components(x));
+    return respond(i,this.text(x),this.components(x),[this.editorPreview(x)]);
   }
   async handle(i){
     if(i.isChatInputCommand()&&["create-embed","edit-embed","place-embed"].includes(i.commandName))return this.command(i);
