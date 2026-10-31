@@ -78,7 +78,7 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
         };
         let message_id=custom.strip_prefix("ticket:priority-select:").unwrap_or("");
         if !snowflake(message_id){return s.reply(id,t,"This ticket priority control is invalid.",true).await;}
-        s.defer(id,t).await?;
+        // The component dispatcher already acknowledged this interaction.
         let channel=s.api(Method::GET,&format!("/channels/{c}"),None).await?;
         let current_name=channel["name"].as_str().unwrap_or("ticket");
         let base_name=current_name.strip_prefix("🟢-")
@@ -212,7 +212,6 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
             optional_input("transcript","Transcript channel ID (blank for none)",&x.transcript_channel_id,false,22),
             optional_input("panel-channel","Panel channel ID (blank for current)",&x.panel_channel_id,false,22)]))).await,
         "ticket:publish"=>{
-            s.defer(id,t).await?;
             match publish_ticket(s,&g,&c,x).await{
                 Ok(dest)=>s.edit_original(t,&format!("Ticket panel published or updated in <#{dest}>.")).await,
                 Err(error)=>{error!("Could not publish ticket panel in guild {g}: {error:#}");s.edit_original(t,"Timi could not publish the ticket panel. Check channel permissions.").await}

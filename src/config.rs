@@ -419,9 +419,10 @@ impl State {
             .map_err(|_|anyhow!("interaction acknowledgement lock poisoned"))?
             .contains(id);
         if already_acknowledged{return Ok(());}
-        // Every deferred interaction uses the same five-second thinking
-        // minimum. Record the start immediately after Discord acknowledges it.
-        self.callback(id,t,5,Some(json!({"flags":64}))).await?;
+        // Acknowledge with a real ephemeral message instead of Discord's
+        // deferred spinner. This prevents the client from showing its generic
+        // interaction-failed state while the handler is still working.
+        self.callback(id,t,4,Some(json!({"content":"Working…","flags":64}))).await?;
         self.deferred_at.lock()
             .map_err(|_|anyhow!("deferred interaction timing lock poisoned"))?
             .insert(t.to_owned(),(std::time::Instant::now(),Duration::from_secs(5)));
