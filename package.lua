@@ -6,6 +6,7 @@ return {
   license = "MIT",
   private = true,
   dependencies = {
+    "luvit/require@2.2.2",
     "luvit/fs@2.0.1",
     "luvit/json@2.5.1",
     "luvit/coro-http@3.2.4",
