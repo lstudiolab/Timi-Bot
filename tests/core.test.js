@@ -126,3 +126,23 @@ test("library management commands are registered with the intended option behavi
   assert.equal(uninstall.options[0].required,true);
   assert.ok(commandData.some(command=>command.name==="automod-word"));
 });
+
+
+test("pending moderation jobs survive a process restart",()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),"timi-moderation-jobs-"));
+  try{
+    const first=new Store(dir,quiet);
+    first.data.moderation_jobs["guild-a"]=[{
+      id:"automod:guild-a:message-a",type:"automod-sanction",status:"pending",
+      guild_id:"guild-a",user_id:"user-a",channel_id:"channel-a",message_ids:["message-a"],
+      reason:"message burst",warning_id:1,action:"timeout",timeout_minutes:10,
+      action_duration_seconds:3,steps:{deleted:false,sanction:false,logged:false},attempts:0
+    }];
+    first.save();
+    const restarted=new Store(dir,quiet);
+    const [job]=restarted.data.moderation_jobs["guild-a"];
+    assert.equal(job.status,"pending");
+    assert.equal(job.user_id,"user-a");
+    assert.deepEqual(job.steps,{deleted:false,sanction:false,logged:false});
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
