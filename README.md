@@ -24,17 +24,17 @@ Timi is a Discord bot implemented in Lua. It connects directly to Discord Gatewa
 
 ## Install dependencies
 
-Install Luvit and Lit for your platform, then from the repository directory run:
+Install Luvit, Luvi, and Lit for your platform. From the repository directory, install the project dependencies:
 
 ```sh
 lit install
 ```
 
-The package manifest installs `luvit/coro-http` and `luvit/coro-websocket`.
+The package manifest installs the Luvit require loader, filesystem and JSON modules, HTTP, and WebSocket modules.
 
 ## Termux setup (Android)
 
-The official Termux package repository provides the Luvit runtime and Lit package manager. On Android, install Git, clone Timi, and run the setup script:
+Install Git, clone Timi, and run the setup script:
 
 ```sh
 pkg update
@@ -44,26 +44,21 @@ cd Timi-Bot
 bash scripts/termux-setup.sh
 ```
 
-The setup script updates Termux, installs `luvit` and `lit`, installs the project dependencies, and checks every Lua source file. It creates `.env` from `.env.example` only when `.env` does not already exist.
+The setup script installs `luvi`, `luvit`, and `lit`, installs and verifies project dependencies, and checks every Lua source file. It creates `.env` from `.env.example` only when `.env` does not already exist.
 
-Then configure credentials:
-
-```sh
-nano .env
-```
-
-Set `DISCORD_TOKEN` and `CLIENT_ID`, save, then start Timi:
+Your existing `.env` is preserved. Start Timi from the repository root with:
 
 ```sh
-luvit main.lua
+luvi .
 ```
 
-To keep Timi running in a Termux session after closing the terminal view, install and use `tmux`:
+To keep Timi running in a Termux session after closing the terminal view, use `tmux`:
 
 ```sh
 pkg install tmux
 tmux new -s timi
-luvit main.lua
+cd ~/Timi-Bot
+luvi .
 ```
 
 Detach with `Ctrl+B`, then `D`; return with `tmux attach -t timi`. Termux must remain installed and Android must not kill its background process.
@@ -72,22 +67,17 @@ Termux is an Android environment. It does not run natively on iOS.
 
 ## Configuration
 
-```sh
-cp .env.example .env
-nano .env
-```
-
-Set `DISCORD_TOKEN` and `CLIENT_ID`. `GUILD_ID` is optional and makes slash command registration apply to one development server; leave it blank for global registration. `DATA_DIR` defaults to `data`.
+The `.env` file is read at startup. Set `DISCORD_TOKEN` and `CLIENT_ID`. `GUILD_ID` is optional and makes slash command registration apply to one development server; leave it blank for global registration. `DATA_DIR` defaults to `data`.
 
 Never commit `.env` or share your bot token. The `data/` directory contains server configuration, verification records, moderation cases, recovery snapshots, and message archives. Back it up before replacing an installation.
 
 ## Run
 
 ```sh
-luvit main.lua
+luvi .
 ```
 
-Keep Termux active while Timi runs. A persistent `tmux` session can keep the process attached. Termux-specific Luvit installation and runtime setup will be documented after the Lua migration is validated.
+Keep Termux active while Timi runs. A persistent `tmux` session can keep the process attached.
 
 ## Commands
 
