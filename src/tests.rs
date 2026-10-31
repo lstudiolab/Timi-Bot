@@ -66,4 +66,17 @@ mod tests {
         assert!(!component_opens_modal("embed:unknown:welcome", true, true));
     }
 
+    
+    #[test]
+    fn ticket_close_confirmation_has_confirm_and_cancel_actions() {
+        let components=ticket_close_confirmation_components();
+        assert_eq!(components.len(),1);
+        let buttons=components[0]["components"].as_array().expect("confirmation row buttons");
+        assert_eq!(buttons.len(),2);
+        assert_eq!(buttons[0]["custom_id"],"ticket:confirm-close");
+        assert_eq!(buttons[1]["custom_id"],"ticket:cancel-close");
+        assert_eq!(buttons[0]["style"],2);
+        assert_eq!(buttons[1]["style"],2);
+    }
+
 }

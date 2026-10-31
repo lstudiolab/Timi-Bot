@@ -28,6 +28,12 @@ async fn component(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
     if custom.starts_with("botguard:"){return bot_component(s,id,t,&v,&custom).await;}
     s.edit_original(t,"This interaction is no longer available.").await
 }
+fn ticket_close_confirmation_components()->Vec<Value>{
+    vec![row(vec![
+        button("ticket:confirm-close","Yes, close it",2),
+        button("ticket:cancel-close","Cancel",2)
+    ])]
+}
 async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Result<()>{
     let g=guild_id(v);let c=channel_id(v);let u=user_id(v);let manager=manage_guild(v);
     if custom=="ticket:wizard-start"{let x=s.ticket(&g);return s.callback(id,t,9,Some(modal("ticket:wizard-stage1","Ticket setup - 1 of 2",vec![
@@ -101,26 +107,26 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
             Ok(value)=>value,
             Err(error)=>{
                 error!("Could not check ticket channel {c}: {error:#}");
-                let _=s.send(&c,json!({"content":"Timi could not check this ticket. Try again."})).await;
                 return s.edit_original(t,"Timi could not check this ticket. Try again.").await;
             }
         };
         let owner=ch["topic"].as_str().unwrap_or("").strip_prefix("timi-ticket-owner:").unwrap_or("").to_owned();
         if owner.is_empty(){
-            let _=s.edit(&c,message_id,json!({"content":"This is not a Timi ticket channel.","components":[]})).await;
             return s.edit_original(t,"This is not a Timi ticket channel.").await;
         }
         if u!=owner&&!manager{
-            let _=s.send(&c,json!({"content":format!("<@{u}> Only the ticket owner or a server manager can close this ticket."),"allowed_mentions":{"users":[u]}})).await;
             return s.edit_original(t,"Only the ticket owner or a server manager can close this ticket.").await;
         }
         if custom=="ticket:close"{
-            s.edit(&c,message_id,json!({"content":"Are you sure you want to close this ticket?","embeds":[],"components":[row(vec![button("ticket:confirm-close","Yes, close it",2),button("ticket:cancel-close","Cancel",2)])]})).await?;
-            return s.edit_original(t,"Confirm the ticket closure using the buttons in this ticket.").await;
+            // Separate ephemeral confirmation; the public ticket embed is never modified.
+            return s.edit_original_with_components(
+                t,
+                "Are you sure you want to close this ticket?",
+                ticket_close_confirmation_components()
+            ).await;
         }
         if custom=="ticket:cancel-close"{
-            s.edit(&c,message_id,json!({"content":"Ticket closure cancelled.","components":[]})).await?;
-            return s.edit_original(t,"Ticket closure cancelled.").await;
+            return s.edit_original_with_components(t,"Ticket closure cancelled.",Vec::new()).await;
         }
         let closing_key=format!("{g}:{c}");
         let already_closing={
@@ -148,8 +154,13 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
                 }
                 Err(error)=>{
                     error!("Ticket close failed for channel {}: {error:#}",channel);
-                    let _=cloned.send(&channel,json!({"content":"Timi could not finish closing this ticket. Check its permissions and try again."})).await;
-                    let _=cloned.edit_original(&interaction_token,"Timi could not finish closing this ticket. Check its permissions and try again.").await;
+                    let detail=format!("{error:#}");
+                    let user_message=if detail.contains("50013") {
+                        "Timi cannot close this ticket because it is missing the Manage Channels permission. The ticket is still open."
+                    } else {
+                        "Timi could not close this ticket. The ticket is still open; check the bot's channel permissions and try again."
+                    };
+                    let _=cloned.edit_original(&interaction_token,user_message).await;
                 }
             }
         });
