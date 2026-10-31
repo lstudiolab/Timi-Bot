@@ -339,7 +339,9 @@ impl State {
         // Discord requires the initial acknowledgement within three seconds.
         // Keep this single-shot and bounded; generic REST retries are unsafe here.
         let response=self.http.post(format!("{API}/interactions/{id}/{t}/callback"))
-            .timeout(Duration::from_secs(2)).json(&payload).send().await
+            // Leave a safety margin inside Discord's three-second initial-response deadline.
+            // This remains single-shot: retrying an interaction callback can create duplicate acknowledgements.
+            .timeout(Duration::from_millis(2500)).json(&payload).send().await
             .context("Discord interaction acknowledgement request failed")?;
         let status=response.status();
         let body=response.text().await.unwrap_or_default();
