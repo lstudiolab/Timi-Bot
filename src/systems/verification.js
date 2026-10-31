@@ -39,7 +39,8 @@ export class Verification {
     if(ch?.isTextBased())await ch.send({content,allowedMentions:{parse:[]}}).catch(()=>{});
   }
   settingsText(s){
-    return `**Timi verification settings**\nVerified role: ${mentionRole(s.role_id)}\nRequired role: ${mentionRole(s.required_role_id)}\nMinimum account age: ${s.min_age_days} days\nReview channel: ${mentionChannel(s.review_channel_id)}\nThresholds: 80+ pass, 60–79 manual review, below 60 kick\nWeights: age 40, history 20, attempts 20, behavior 10, avatar 10\\nPanel placeholders: {user}, {username}, {user_tag}, {user_id}, {server}, {server_id}, {member_count}, {channel}, {channel_name}, {owner}, {owner_id}, {bot}, {bot_name}, {date}, {time}, {timestamp}`;
+    return `**Timi verification settings**\nVerified role: ${mentionRole(s.role_id)}\nRequired role: ${mentionRole(s.required_role_id)}\nMinimum account age: ${s.min_age_days} days\nReview channel: ${mentionChannel(s.review_channel_id)}\nThresholds: 80+ pass, 60–79 manual review, below 60 kick\nWeights: age 40, history 20, attempts 20, behavior 10, avatar 10
+Panel placeholders: {user}, {username}, {user_tag}, {user_id}, {server}, {server_id}, {member_count}, {channel}, {channel_name}, {owner}, {owner_id}, {bot}, {bot_name}, {date}, {time}, {timestamp}`;
   }
   async command(i){
     if(!await requireOwner(i))return;
