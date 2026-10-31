@@ -44,7 +44,7 @@ const MAX_MESSAGE_BACKUP: usize = 25_000;
 // Implementation is split by subsystem to keep debugging and maintenance focused.
 include!("config.rs");
 include!("discord.rs");
-include!("commands.rs");
+include!("commands.rs");\ninclude!("embeds.rs");
 include!("tickets.rs");
 include!("role_picker.rs");
 include!("moderation.rs");
