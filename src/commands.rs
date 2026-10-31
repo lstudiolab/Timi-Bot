@@ -6,6 +6,9 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
     match name{
         "warn"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}
+            // Record and log actions can require disk and Discord REST requests.
+            // Acknowledge before doing either so the initial response stays inside Discord's deadline.
+            s.defer(id,t).await?;
             let target=opt_str(&opts,"member").unwrap_or_default();let reason=opt_str(&opts,"reason").unwrap_or_else(||"No reason provided".into());
             if !snowflake(&target)||target==u{return s.reply(id,t,"Choose a valid member other than yourself.",true).await;}
             let case_id={
@@ -18,7 +21,7 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             s.persist()?;
             let log_channel=s.mods(&g).log_channel_id;
             log_to(s,&g,&log_channel,&format!("Warning #{case_id}: <@{target}> — {reason} (moderator <@{u}>)")).await;
-            s.reply(id,t,&format!("Warning #{case_id} recorded for <@{target}>."),true).await
+            s.edit_original(t,&format!("Warning #{case_id} recorded for <@{target}>.")).await
         }
         "warnings"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}let target=opt_str(&opts,"member").unwrap_or_default();
@@ -172,6 +175,9 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             s.edit_original_with_components(t,"**Role picker setup**\n\nCreate a self-service role menu. You can publish multiple menus in different channels. Configure its appearance, choose the allowed roles, then publish.",vec![row(vec![button("rolepicker:start","Configure role picker",1)])]).await
         }
         "verify-panel"=>{
+            // Fetching server ownership and publishing the panel require REST calls.
+            // Defer first; the follow-up edits the acknowledged response.
+            s.defer(id,t).await?;
             let server=s.api(Method::GET,&format!("/guilds/{g}"),None).await?;
             if server.get("owner_id").and_then(Value::as_str)!=Some(&u){return s.reply(id,t,"Only the server owner can publish the verification panel.",true).await;}
             let mut x=s.verify(&g);
@@ -185,7 +191,7 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
                 x.published_panels.push(PanelRef{channel_id:c,message_id:message["id"].as_str().unwrap_or("").into()});
                 s.save_verify(&g,x)?;
             }
-            s.reply(id,t,if updated{"Existing verification panel updated."}else{"Risk-based verification panel published."},true).await
+            s.edit_original(t,if updated{"Existing verification panel updated."}else{"Risk-based verification panel published."}).await
         }
         _=>s.reply(id,t,"Unknown command.",true).await
     }
