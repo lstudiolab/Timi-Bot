@@ -196,13 +196,22 @@ export class Tickets {
       const key=g.id+":"+ch.id; if(this.closing.has(key)) return deny(i,"This ticket is already closing.");
       this.closing.add(key);
       try {
+        await i.update({
+          content:"Closing this ticket in 5 seconds…",
+          components:[row(button("ticket:confirm-close","Closing this ticket in 5 seconds…",ButtonStyle.Danger).setDisabled(true))],
+          allowedMentions:{parse:[]}
+        });
+        await new Promise(resolve=>setTimeout(resolve,5000));
         try { await this.transcript(g,ch); } catch(e) { this.logger.warn("Ticket transcript failed:",e.message); }
         await this.log(g,`Ticket closed. Channel: <#${ch.id}>. Closed by <@${i.user.id}>.`);
         await ch.delete("Ticket closed");
-        await respond(i,"Ticket closed.",[]).catch(()=>{});
       } catch(e) {
         this.logger.error("Ticket close failed:",e);
-        await respond(i,"Timi could not close this ticket. Check the bot's channel permissions and try again.",[]).catch(()=>{});
+        if(i.deferred||i.replied) {
+          await i.editReply({content:"Timi could not close this ticket. Check the bot's channel permissions and try again.",components:[],allowedMentions:{parse:[]}}).catch(()=>{});
+        } else {
+          await deny(i,"Timi could not close this ticket. Check the bot's channel permissions and try again.").catch(()=>{});
+        }
       } finally { this.closing.delete(key); }
       return;
     }
