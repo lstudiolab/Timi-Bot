@@ -28,13 +28,26 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
         }
         "clear-warnings"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}let target=opt_str(&opts,"member").unwrap_or_default();
-            let mut store=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;let cases=store.moderation_cases.entry(g.clone()).or_default();let before=cases.len();cases.retain(|x|!(x["user_id"].as_str()==Some(&target)&&x["type"]=="warning"));let n=before-cases.len();drop(store);s.persist()?;
+            let n={
+                let mut store=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;
+                let cases=store.moderation_cases.entry(g.clone()).or_default();
+                let before=cases.len();
+                cases.retain(|x|!(x["user_id"].as_str()==Some(&target)&&x["type"]=="warning"));
+                before-cases.len()
+            };
+            s.persist()?;
             s.reply(id,t,&format!("Cleared {n} warning(s) for <@{target}>."),true).await
         }
         "automod-word"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}let action=opt_str(&opts,"action").unwrap_or_default();let word=opt_str(&opts,"word").unwrap_or_default().trim().to_lowercase();
-            let mut store=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;let list=store.automod_words.entry(g.clone()).or_default();
-            let result=match action.as_str(){"add"=>{if word.len()<2||word.len()>80{return s.reply(id,t,"Word must be 2–80 characters.",true).await;}if !list.contains(&word){list.push(word.clone());}format!("Added {word} to the blocked-word list.")},"remove"=>{let n=list.len();list.retain(|x|x!=&word);format!("Removed {} entry.",n-list.len())},"list"=>format!("Blocked words: {}",if list.is_empty(){"None".into()}else{list.join(", ")}),_=>"Choose list, add, or remove.".into()};drop(store);s.persist()?;s.reply(id,t,&result,true).await
+            if action=="add"&&(word.len()<2||word.len()>80){return s.reply(id,t,"Word must be 2–80 characters.",true).await;}
+            let result={
+                let mut store=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;
+                let list=store.automod_words.entry(g.clone()).or_default();
+                match action.as_str(){"add"=>{if !list.contains(&word){list.push(word.clone());}format!("Added {word} to the blocked-word list.")},"remove"=>{let n=list.len();list.retain(|x|x!=&word);format!("Removed {} entry.",n-list.len())},"list"=>format!("Blocked words: {}",if list.is_empty(){"None".into()}else{list.join(", ")}),_=>"Choose list, add, or remove.".into()}
+            };
+            s.persist()?;
+            s.reply(id,t,&result,true).await
         }
         "lockdown"|"unlockdown"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}s.defer(id,t).await?;
