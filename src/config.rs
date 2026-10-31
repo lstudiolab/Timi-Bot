@@ -393,8 +393,8 @@ impl State {
         // A handler may discover a validation or permission error after it has
         // already deferred the interaction. Discord rejects a second initial
         // callback in that case; update the acknowledged response instead.
-        let already_acknowledged=self.callback_attempts.lock()
-            .map_err(|_|anyhow!("interaction callback lock poisoned"))?
+        let already_acknowledged=self.callback_acknowledged.lock()
+            .map_err(|_|anyhow!("interaction acknowledgement lock poisoned"))?
             .contains(id);
         if already_acknowledged {
             return self.edit_original(t,text).await;
