@@ -24,24 +24,12 @@ async fn mod_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Resul
     // response, which can fail and leave the panel showing a generic error.
     if custom=="modpanel:enable"||custom=="modpanel:disable"{
         next.enabled=custom=="modpanel:enable";
-        // Queue the setting in memory before acknowledging the component.
-        // Disk persistence is debounced and logged independently, so a successful
-        // Discord message update cannot later be replaced by a generic error.
+        // Acknowledge the component immediately with DEFERRED_UPDATE_MESSAGE.
+        // Persist and render the updated panel only after Discord has accepted
+        // the acknowledgement, avoiding a slow initial update callback.
+        s.callback(id,t,6,None).await?;
         s.queue_mods(&g,next.clone())?;
-        if let Err(error)=s.callback(id,t,7,Some(json!({"content":mod_text(&next),"components":mod_components(&next)}))).await {
-            let detail=format!("{error:#}");
-            // Discord can apply an interaction callback and then the HTTP
-            // response can be lost or arrive after the interaction was consumed.
-            // In that case a retry/late acknowledgement returns 10062 even though
-            // the panel has already been updated. Never let the global handler
-            // overwrite that panel with a generic failure message.
-            if detail.contains("10062") || detail.contains("Unknown interaction") {
-                tracing::debug!("Moderation toggle callback for interaction {id} was already consumed; preserving the updated panel.");
-                return Ok(());
-            }
-            return Err(error);
-        }
-        return Ok(());
+        return s.edit_original_with_components(t,&mod_text(&next),mod_components(&next)).await;
     }
     // Acknowledge other component clicks before saving or making REST calls.
     s.callback(id,t,6,None).await?;
