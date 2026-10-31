@@ -43,8 +43,14 @@ async function coreCommand(i){
   const name=i.options.getString("libraryname");
   if(!name)return respond(i,"Enter a library name in libraryname. Available: Moderation, Support, Foundation. Use /library-list for details.");
   const result=manager.install(i.guildId,name);if(!result.ok)return respond(i,result.error);
+  try {
+   await syncGuildCommands(i.guildId);
+  } catch(error) {
+   logger.error(`Could not publish ${result.library.name} commands for guild ${i.guildId}:`,error);
+   return respond(i,`**${result.library.name}** was saved as installed, but Discord did not accept the slash-command update. Check the bot's application permissions and restart Timi to retry the sync.`);
+  }
   if(libraries[result.library.name].ready)await libraries[result.library.name].ready(i.guild);
-  return respond(i,`**${result.library.name}** is installed and active in this server.\n${result.library.description}`);
+  return respond(i,`**${result.library.name}** is installed and active in this server. Its slash commands have been published.\n${result.library.description}`);
  }
 }
 async function handleInteraction(i){
@@ -59,6 +65,10 @@ async function handleInteraction(i){
  if(!manager.installed(i.guildId,required))return respond(i,`The **${required}** library is not installed. This control is inactive.`);
  return libraries[required].handleInteraction(i);
 }
+client.on(Events.GuildCreate,guild=>{
+ if(!client.isReady())return;
+ syncGuildCommands(guild.id).catch(error=>logger.error(`Command sync failed for new guild ${guild.id}:`,error));
+});
 client.once(Events.ClientReady,async ready=>{
  logger.info(`Logged in as ${ready.user.tag}`);
  try{await rest.put(Routes.applicationCommands(config.clientId),{body:commandsForLibraries([])});logger.info("Registered core global slash commands.");}catch(error){logger.error("Global command sync failed:",error);}
