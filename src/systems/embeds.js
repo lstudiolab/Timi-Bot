@@ -1,14 +1,15 @@
 import { PermissionFlagsBits, TextInputStyle, ButtonStyle, EmbedBuilder } from "discord.js";
 import { greyEmbed,button,row,textInput,modal,respond,deny,requireManager } from "../ui.js";
+import { renderTemplate } from "../utils.js";
 
 export class Embeds {
   constructor(client,store,logger){this.client=client;this.store=store;this.logger=logger;}
-  payload(x){
+  payload(x,context={}){
     const e=new EmbedBuilder().setColor(0x808080);
-    if(x.title)e.setTitle(x.title);if(x.description)e.setDescription(x.description);if(x.url)e.setURL(x.url);
-    if(x.author)e.setAuthor({name:x.author});if(x.footer)e.setFooter({text:x.footer});
+    if(x.title)e.setTitle(renderTemplate(x.title,context));if(x.description)e.setDescription(renderTemplate(x.description,context));if(x.url)e.setURL(renderTemplate(x.url,context));
+    if(x.author)e.setAuthor({name:renderTemplate(x.author,context)});if(x.footer)e.setFooter({text:renderTemplate(x.footer,context)});
     if(x.thumbnail)e.setThumbnail(x.thumbnail);if(x.image)e.setImage(x.image);
-    if(x.fields?.length)e.addFields(x.fields.map(f=>({name:f.name,value:f.value,inline:!!f.inline})));
+    if(x.fields?.length)e.addFields(x.fields.map(f=>({name:renderTemplate(f.name,context),value:renderTemplate(f.value,context),inline:!!f.inline})));
     return e;
   }
   editorPreview(x){
@@ -50,7 +51,7 @@ export class Embeds {
     if(!x)return deny(i,"No saved embed with that name. Use /create-embed first.");
     if(i.commandName==="edit-embed")return respond(i,this.text(x),this.components(x),[this.editorPreview(x)]);
     if(i.commandName==="place-embed"){
-      const sent=await i.channel.send({embeds:[this.payload(x)],allowedMentions:{parse:[]}});
+      const sent=await i.channel.send({embeds:[this.payload(x,{guild:i.guild,user:i.user,member:i.member,channel:i.channel,client:this.client})],allowedMentions:{parse:[]}});
       x.placements.push({channel_id:i.channelId,message_id:sent.id});this.store.saveEmbed(x);
       return respond(i,"Embed placed in this channel.");
     }
