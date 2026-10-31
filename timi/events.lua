@@ -1,6 +1,6 @@
-local util = require("timi.util")
-local Protection = require("timi.protection")
-local Recovery = require("timi.recovery")
+local util = require("./util")
+local Protection = require("./protection")
+local Recovery = require("./recovery")
 
 local Events = {}
 Events.__index = Events
