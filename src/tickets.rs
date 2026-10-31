@@ -69,19 +69,33 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
     }
     if custom=="ticket:open"{s.defer(id,t).await?;return open_ticket(s,t,&g,&u).await;}
     if custom=="ticket:close"||custom=="ticket:confirm-close"{
-        // Consume the ephemeral confirmation message instead of creating a second response.
-        if custom=="ticket:confirm-close"{s.defer_update(id,t).await?;}else{s.defer(id,t).await?;}
+        // The first click creates the confirmation. Confirming uses a deferred
+        // ephemeral response so Discord shows its native thinking indicator.
+        if custom=="ticket:close"{s.defer(id,t).await?;}else{s.defer(id,t).await?;}
         let ch=match s.api(Method::GET,&format!("/channels/{c}"),None).await{
             Ok(value)=>value,Err(error)=>{error!("Could not check ticket channel {c}: {error:#}");s.edit_original(t,"Timi could not check this ticket. Try again.").await?;return Ok(());}
         };
         let owner=ch["topic"].as_str().unwrap_or("").strip_prefix("timi-ticket-owner:").unwrap_or("").to_owned();
         if owner.is_empty(){return s.edit_original(t,"This is not a Timi ticket channel.").await;}
         if u!=owner&&!manager{return s.edit_original(t,"Only the ticket owner or a server manager can close this ticket.").await;}
-        if custom=="ticket:close"{return s.edit_original_with_components(t,"Are you sure you want to close this ticket?",vec![row(vec![button("ticket:confirm-close","Yes, close it",4)])]).await;}
-        // Remove the confirmation button immediately so repeated clicks cannot queue duplicate close jobs.
-        s.edit_original_with_components(t,"Closing this ticket in 5 seconds…",Vec::new()).await?;
-        let cloned=s.clone();let guild=g.clone();let channel=c.clone();let closer=u.clone();
-        tokio::spawn(async move{sleep(Duration::from_secs(5)).await;if let Err(error)=close_ticket(&cloned,&guild,&channel,&closer).await{error!("Ticket close failed for channel {}: {error:#}",channel);}});
+        if custom=="ticket:close"{return s.edit_original_with_components(t,"Are you sure you want to close this ticket?",vec![row(vec![button("ticket:confirm-close","Yes, close it",2)])]).await;}
+        // Disable the source button immediately, while keeping the interaction
+        // response in its native thinking state during the close operation.
+        let message_id=v.pointer("/message/id").and_then(Value::as_str).unwrap_or("");
+        if !message_id.is_empty(){
+            s.edit(&c,message_id,json!({"components":[]})).await?;
+        }
+        let cloned=s.clone();let guild=g.clone();let channel=c.clone();let closer=u.clone();let token=t.to_owned();
+        tokio::spawn(async move{
+            sleep(Duration::from_secs(5)).await;
+            if let Err(error)=close_ticket(&cloned,&guild,&channel,&closer).await{
+                error!("Ticket close failed for channel {}: {error:#}",channel);
+                let _=cloned.edit_original(&token,"Timi could not finish closing this ticket.").await;
+            }else{
+                // Complete the deferred interaction without posting a visible status message.
+                let _=cloned.edit_original(&token," ").await;
+            }
+        });
         return Ok(());
     }
     if !manager{return s.reply(id,t,"You need Manage Server permission to configure tickets.",true).await;}
