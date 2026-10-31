@@ -15,8 +15,8 @@ printf '\n== Updating Termux packages ==\n'
 pkg update
 pkg upgrade -y
 
-printf '\n== Installing Luvit, Luvi, Lit, and Git ==\n'
-pkg install -y git luvi luvit lit
+printf '\n== Installing Luvi, Lit, and Git ==\n'
+pkg install -y git luvi lit
 
 for command in luvi lit luajit; do
   if ! command -v "$command" >/dev/null 2>&1; then
@@ -34,20 +34,19 @@ else
   printf '\nExisting .env preserved.\n'
 fi
 
-printf '\n== Installing Lua dependencies ==\n'
+printf '\n== Installing the pinned Luvit runtime and application dependencies ==\n'
 lit install
 
-printf '\n== Verifying required Lit dependencies ==\n'
-for module in fs json coro-http coro-websocket require; do
-  if [[ ! -d "deps/$module" && ! -f "deps/$module.lua" ]]; then
-    printf 'Missing dependency: %s. Installing explicitly...\n' "$module"
-    case "$module" in
-      fs) lit install luvit/fs@2.0.1 ;;
-      json) lit install luvit/json@2.5.1 ;;
-      coro-http) lit install luvit/coro-http@3.2.4 ;;
-      coro-websocket) lit install luvit/coro-websocket@3.1.1 ;;
-      require) lit install luvit/require@2.2.2 ;;
-    esac
+if [[ ! -f deps/luvit/init.lua ]]; then
+  printf '%s\n' "The pinned Luvit runtime was not installed at deps/luvit/init.lua." >&2
+  printf '%s\n' "Check the Lit installation output before starting Timi." >&2
+  exit 1
+fi
+
+for module in coro-http coro-websocket; do
+  if [[ ! -d "deps/$module" && ! -f "deps/$module.lua" && ! -f "deps/$module/init.lua" ]]; then
+    printf 'Required dependency was not installed: %s\n' "$module" >&2
+    exit 1
   fi
 done
 
