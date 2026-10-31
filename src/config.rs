@@ -121,7 +121,8 @@ struct Store {
     #[serde(default)] channels:HashMap<String,Value>,
     #[serde(default)] messages:HashMap<String,Vec<Value>>,
     #[serde(default)] role_picker_menus:HashMap<String,RolePickerMenu>,
-    #[serde(default)] role_picker_drafts:HashMap<String,RolePickerDraft>,\n    #[serde(default)] embeds:HashMap<String,SavedEmbed>,
+    #[serde(default)] role_picker_drafts:HashMap<String,RolePickerDraft>,
+    #[serde(default)] embeds:HashMap<String,SavedEmbed>,
 }
 fn migrate_legacy_data(dir:&std::path::Path,store:&mut Store)->Result<bool>{
     fn read(path:&PathBuf)->Option<Value>{fs::read(path).ok().and_then(|b|serde_json::from_slice(&b).ok())}
@@ -271,7 +272,9 @@ impl State {
     fn member(&self,g:&str,u:&str)->MemberRecord { self.store.lock().ok().and_then(|s|s.members.get(&format!("{g}:{u}")).cloned()).unwrap_or_default() }
     fn role_picker_draft(&self,id:&str)->Option<RolePickerDraft>{self.store.lock().ok().and_then(|s|s.role_picker_drafts.get(id).cloned())}
     fn role_picker_menu(&self,id:&str)->Option<RolePickerMenu>{self.store.lock().ok().and_then(|s|s.role_picker_menus.get(id).cloned())}
-    fn embed(&self,g:&str,n:&str)->Option<SavedEmbed>{self.store.lock().ok().and_then(|s|s.embeds.get(&format!("{g}:{n}")).cloned())}\n    fn save_embed(&self,e:SavedEmbed)->Result<()>{let key=format!("{}:{}",e.guild_id,e.name);self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?.embeds.insert(key,e);self.persist()}\n    fn save_role_picker_draft(&self,id:&str,draft:RolePickerDraft)->Result<()>{
+    fn embed(&self,g:&str,n:&str)->Option<SavedEmbed>{self.store.lock().ok().and_then(|s|s.embeds.get(&format!("{g}:{n}")).cloned())}
+    fn save_embed(&self,e:SavedEmbed)->Result<()>{let key=format!("{}:{}",e.guild_id,e.name);self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?.embeds.insert(key,e);self.persist()}
+    fn save_role_picker_draft(&self,id:&str,draft:RolePickerDraft)->Result<()>{
         self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?.role_picker_drafts.insert(id.into(),draft);self.persist()
     }
     fn save_role_picker_menu(&self,menu:RolePickerMenu)->Result<()>{
