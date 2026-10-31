@@ -39,7 +39,7 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
         let (label,color,indicator)=match priority{
             "low"=>("Low",0x57F287,"🟢"),
             "normal"=>("Normal",0xFEE75C,"🟡"),
-            "high"=>("High",0xED4245,"🔴"),
+            "high"=>("High",0xFAA61A,"🟠"),
             "urgent"=>("Urgent",0xED4245,"🔴"),
             _=>return s.reply(id,t,"Choose a valid priority level.",true).await
         };
