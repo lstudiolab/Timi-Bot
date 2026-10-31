@@ -97,9 +97,9 @@ export class Tickets {
         return null;
       });
       if(oldMessage){
-        await oldMessage.edit(this.payload(settings));
+        await oldMessage.edit(this.payload(settings,{guild,channel:dest,client:this.client}));
       }else{
-        const sent=await dest.send(this.payload(settings));
+        const sent=await dest.send(this.payload(settings,{guild,channel:dest,client:this.client}));
         settings.published_panels=settings.published_panels.filter(p=>p?.channel_id!==dest.id);
         settings.published_panels.push({channel_id:dest.id,message_id:sent.id});
       }
@@ -115,7 +115,7 @@ export class Tickets {
   }
   async refresh(settings) {
     for (const p of settings.published_panels||[]) {
-      try { const c=await this.client.channels.fetch(p.channel_id); const m=await c.messages.fetch(p.message_id); await m.edit(this.payload(settings)); }
+      try { const c=await this.client.channels.fetch(p.channel_id); const m=await c.messages.fetch(p.message_id); await m.edit(this.payload(settings,{guild:c.guild,channel:c,client:this.client})); }
       catch(e) { this.logger.warn("Could not refresh ticket panel:",e.message); }
     }
   }
