@@ -7,6 +7,13 @@ export const commandData=[
   new SlashCommandBuilder().setName("ticket-setup").setDescription("Create Timi private channels and the ticket category.").setDefaultMemberPermissions(manageGuild),
   new SlashCommandBuilder().setName("ticket-panel").setDescription("Create or update the customizable ticket panel.").setDefaultMemberPermissions(manageGuild),
   new SlashCommandBuilder().setName("ticket-settings").setDescription("Edit the settings of your ticket panel.").setDefaultMemberPermissions(manageGuild),
+  new SlashCommandBuilder().setName("automod-word").setDescription("Manage blocked words and phrases.")
+    .setDefaultMemberPermissions(manageGuild)
+    .addSubcommand(s=>s.setName("add").setDescription("Block a word or phrase.")
+      .addStringOption(o=>o.setName("phrase").setDescription("Word or phrase to block").setRequired(true).setMaxLength(100)))
+    .addSubcommand(s=>s.setName("remove").setDescription("Remove a blocked word or phrase.")
+      .addStringOption(o=>o.setName("phrase").setDescription("Exact phrase to remove").setRequired(true).setMaxLength(100)))
+    .addSubcommand(s=>s.setName("list").setDescription("List blocked words and phrases.")),
   new SlashCommandBuilder().setName("moderation-settings").setDescription("Configure Timi moderation and anti-spam protection.").setDefaultMemberPermissions(manageGuild),
   new SlashCommandBuilder().setName("verify-settings").setDescription("Configure risk-based verification (server owner only).")
     .addRoleOption(o=>o.setName("role").setDescription("Role granted after passing"))
