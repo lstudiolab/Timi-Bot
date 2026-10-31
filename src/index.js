@@ -28,6 +28,7 @@ async function coreCommand(i){
   const name=i.options.getString("libraryname");
   if(!name)return respond(i,"Enter a library name in libraryname. Available: Moderation, Support, Foundation. Use /library-list for details.");
   const result=manager.install(i.guildId,name);if(!result.ok)return respond(i,result.error);
+  if(libraries[result.library.name].ready)await libraries[result.library.name].ready(i.guild);
   return respond(i,`**${result.library.name}** is installed and active in this server.\n${result.library.description}`);
  }
 }
