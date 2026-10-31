@@ -22,4 +22,17 @@ export const commandData=[
     .addStringOption(o=>o.setName("name").setDescription("Saved embed name").setRequired(true).setMaxLength(24)),
   new SlashCommandBuilder().setName("edit-embed").setDescription("Edit a saved embed.").setDefaultMemberPermissions(manageGuild)
     .addStringOption(o=>o.setName("name").setDescription("Saved embed name").setRequired(true).setMaxLength(24))
+
+  new SlashCommandBuilder().setName("ping").setDescription("Show Timi gateway latency."),
+  new SlashCommandBuilder().setName("server-info").setDescription("Show information about this server."),
+  new SlashCommandBuilder().setName("user-info").setDescription("Show information about a server member.")
+    .addUserOption(o=>o.setName("user").setDescription("Member to inspect")),
+  new SlashCommandBuilder().setName("avatar").setDescription("Show a user's avatar.")
+    .addUserOption(o=>o.setName("user").setDescription("User whose avatar to show")),
+  new SlashCommandBuilder().setName("welcome-settings").setDescription("Configure welcome and goodbye messages.")
+    .setDefaultMemberPermissions(manageGuild)
+    .addChannelOption(o=>o.setName("welcome-channel").setDescription("Channel for new member messages").addChannelTypes(ChannelType.GuildText))
+    .addStringOption(o=>o.setName("welcome-message").setDescription("Welcome text; supports {user}, {username}, {server}, {member_count}").setMaxLength(1800))
+    .addChannelOption(o=>o.setName("goodbye-channel").setDescription("Channel for member departure messages").addChannelTypes(ChannelType.GuildText))
+    .addStringOption(o=>o.setName("goodbye-message").setDescription("Goodbye text; supports {user}, {username}, {server}, {member_count}").setMaxLength(1800))
 ].map(command=>command.toJSON());
