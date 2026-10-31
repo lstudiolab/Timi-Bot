@@ -1,77 +1,77 @@
 # Timi Bot
 
-Timi is a Discord bot written in Rust. Verification is performed entirely inside Discord; there is no email verification website or external verification flow.
+Timi is a Discord bot implemented in Lua. It connects directly to Discord Gateway and REST API v10 using the Luvit runtime. Slash commands, buttons, select menus, and modals are handled by Timi's Lua interaction layer.
+
+## Features
+
+- Configurable ticket setup, panels, private ticket channels, private staff threads, priority selection, close confirmation, and transcripts (up to 1,000 recent messages).
+- Moderation controls for message bursts, repeated messages, invite links, mass mentions, excessive caps, and rapid link posting. Sanctions can be timeout, kick, ban, or delete-only.
+- Risk-based account verification with configurable verified/prerequisite roles, minimum account age, review channel, scoring, manual review, and owner-only controls.
+- Temporary restrictions and owner approval/rejection when another bot joins a server.
+- New-account alerts and join-burst notifications.
+- Anti-nuke recovery using channel snapshots and a seven-day archive of up to 25,000 recent human-authored messages per server.
+- Persistent self-service role-picker menus.
+- Reusable embeds with edit-in-place updates for every message where an embed was placed.
 
 ## Requirements
 
-- Rust stable toolchain
+- Luvit runtime (LuaJIT-based)
+- Lit package manager
 - A Discord application and bot token
-- Invite scopes: `bot` and `applications.commands`
-- Enable **Server Members Intent** and **Message Content Intent** in Developer Portal → Bot → Privileged Gateway Intents
-- Grant the bot the permissions required by the enabled systems: View Channels, Send Messages, Read Message History, Embed Links, Manage Channels, Manage Messages, Manage Roles, Moderate Members, View Audit Log, Kick Members and Ban Members
+- OAuth scopes: `bot` and `applications.commands`
+- Enable Server Members Intent and Message Content Intent in the Discord Developer Portal.
+- Give Timi only the permissions required for enabled features: View Channels, Send Messages, Read Message History, Embed Links, Manage Channels, Manage Messages, Manage Roles, Moderate Members, View Audit Log, Kick Members, and Ban Members.
 
-## Install on Termux
+## Install dependencies
+
+Install Luvit and Lit for your platform, then from the repository directory run:
 
 ```sh
-pkg update && pkg upgrade -y
-pkg install rust git clang make pkg-config openssl -y
-
-git clone https://github.com/lstudiolab/Timi-Bot.git
-cd Timi-Bot
-cp .env.example .env
-nano .env
-
-cargo build --release
-./target/release/timi-bot
+lit install
 ```
 
-The release binary is compiled for the Android device architecture. Keep Termux active while Timi runs. A persistent shell session such as `tmux` can keep the process attached to a session.
+The package manifest installs `luvit/coro-http` and `luvit/coro-websocket`.
 
 ## Configuration
 
-Set these values in `.env`:
+```sh
+cp .env.example .env
+nano .env
+```
 
-- `DISCORD_TOKEN`: the bot token
-- `CLIENT_ID`: the Discord application ID
-- `GUILD_ID`: optional development server ID; leave empty to register commands globally
-- `DATA_DIR`: optional data directory; defaults to `data`
-- `RUST_LOG`: optional logging filter; defaults to `info`
+Set `DISCORD_TOKEN` and `CLIENT_ID`. `GUILD_ID` is optional and makes slash command registration apply to one development server; leave it blank for global registration. `DATA_DIR` defaults to `data`.
 
-Never commit `.env` or share your bot token. Keep the `data/` directory backed up; it contains server configuration and recovery records.
+Never commit `.env` or share your bot token. The `data/` directory contains server configuration, verification records, moderation cases, recovery snapshots, and message archives. Back it up before replacing an installation.
+
+## Run
+
+```sh
+luvit main.lua
+```
+
+Keep Termux active while Timi runs. A persistent `tmux` session can keep the process attached. Termux-specific Luvit installation and runtime setup will be documented after the Lua migration is validated.
 
 ## Commands
 
-- `/ticket-setup` creates the ticket category and private support/log channels, then provides the ticket setup wizard.
-- `/ticket-panel` publishes the configured public ticket panel.
-- `/ticket-settings` opens the ticket configurator. Changes update the existing panel rather than requiring a duplicate panel message.
-- `/moderation-settings` opens the moderation settings panel.
+- `/ticket-setup` creates the ticket category and private support/log channels, then opens the ticket setup wizard.
+- `/ticket-panel` publishes the configured ticket panel or updates its existing message.
+- `/ticket-settings` opens the ticket configurator.
+- `/moderation-settings` creates or updates the moderation settings panel.
 - `/verify-settings` displays or changes verification settings. Only the server owner can use it.
-- `/verify-panel` publishes the verification panel. Only the server owner can use it.
+- `/verify-panel` publishes or updates the risk-based verification panel. Only the server owner can use it.
+- `/setup-role-picker` creates another self-service role picker menu. Only the server owner can use it.
+- `/create-embed`, `/edit-embed`, and `/place-embed` create, edit, and publish reusable embeds.
 
-Ticket configuration covers the panel title and description, open and close button labels, ticket welcome message, category name, support role, transcript channel and panel destination. A member can have one open ticket at a time, with a short creation cooldown. Closing requires confirmation and either ticket ownership or Manage Server permission. The transcript copies up to 1,000 recent messages, including attachment references, before the ticket channel is deleted.
+## Interaction behavior
 
-## Protection systems
-
-**Moderation** detects message bursts, duplicate or near-duplicate messages, Discord invite links, mass mentions, excessive capital letters and rapid link posting. Members with Manage Messages or Administrator are exempt. Configurable sanctions are timeout, kick, ban or delete-only. Invite, mention and caps filters can be toggled independently.
-
-**Risk-based verification** uses these maximum score weights: account age 40, server history 20, verification attempts 20, recorded suspicious behavior 10 and avatar 10. Scores of 80–100 pass, 60–79 require manual review and below 60 trigger a kick. An account younger than the configured minimum is always routed to manual review and is never kicked solely because of age. A default avatar is only a weak signal. The owner can configure a verified role, a prerequisite role, a minimum account age and a review channel.
-
-**Bot protection** temporarily restricts newly joined bots and sends approval or rejection controls to the private owner channel. New-account alerts and join-burst notifications are also sent there.
-
-**Anti-nuke and recovery** monitor channel deletion bursts, snapshot channel settings, archive human-authored text messages for seven days and attempt to recreate deleted channels after a confirmed burst. Up to 25,000 recent messages per server are retained. Restored messages are archival copies with new message IDs. Attachment URLs are referenced rather than re-uploaded and may expire; embeds and pre-deployment history cannot be recreated.
+Timi acknowledges non-modal interactions immediately and displays a common `Working…` state before the final response. Modal-opening actions respond with the modal directly because Discord requires a modal to be the initial interaction response. Initial callbacks are single-shot and are never retried. Runtime failures are logged; the global error handler does not replace an interaction with a generated generic error message.
 
 ## Data and recovery
 
-Timi stores runtime settings and recovery records under `DATA_DIR` (default: `data`). Back up this directory before replacing the installation or moving to another device. Keep backups private because they may contain server configuration and archived message content.
+The live store is `data/timi.json`, with `data/timi.json.bak` as the last-known-good copy. If the main file is invalid, Timi attempts to recover from the backup and preserves the invalid file rather than silently resetting it. On startup, old `ticket-settings.json`, `moderation-settings.json`, `verification.json`, and `recovery-backup.json` files are imported when corresponding records are missing. Keep old files until the new installation has been checked and backed up.
 
-## Rust-only runtime
+Channel and message recovery are best-effort Discord API operations. Restored messages are archival copies with new message IDs. Attachment URLs are references and may expire. Deleted message embeds and history from before Timi began archiving cannot be recreated. Discord does not expose member IP addresses, device fingerprints, browser fingerprints, or reliable cross-account identity to bots.
 
-The Discord gateway, slash commands, ticket panels, moderation, risk-based verification, bot approval, and anti-nuke recovery run in the Rust application under `src/main.rs`. The former JavaScript bootstrap and command modules have been consolidated into that runtime and removed. The unused standalone email-verification API was retired; verification is handled inside Discord.
+## Testing
 
-On first startup, Timi imports existing `ticket-settings.json`, `moderation-settings.json`, `verification.json`, and `recovery-backup.json` data into `data/timi.json`. Keep the original data files until you have confirmed the migrated installation is working and backed up the new `data/timi.json` file.
-
-## Platform limits
-
-Discord does not expose IP addresses, device or browser fingerprints, VPN/proxy status or reliable cross-account identity to bots. Timi does not claim to inspect these signals.
-
-Test ticket permissions and moderation thresholds in a private server before production use. Role hierarchy and bot permissions determine whether role assignment, timeout, kick, ban or quarantine actions can succeed.
+GitHub Actions checks Lua syntax and runs the pure Lua unit tests on every push and pull request to `main`.

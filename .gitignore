@@ -1,7 +1,10 @@
-/target/
 /.env
 /.env.*
 !/.env.example
 /data/*.json
 /data/*.tmp
-.DS_Store
+/data/*.bak
+/data/*.corrupt-*
+/deps/
+/lit_modules/
+/.DS_Store
