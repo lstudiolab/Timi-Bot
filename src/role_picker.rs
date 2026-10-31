@@ -35,8 +35,9 @@ async fn role_picker_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str
         draft.roles=v.pointer("/data/values").and_then(Value::as_array).map(|a|a.iter().filter_map(Value::as_str).map(str::to_owned).collect()).unwrap_or_default();
         if draft.roles.is_empty(){return s.reply(id,t,"Select at least one role for this menu.",true).await;}
         if draft.roles.len()>25{return s.reply(id,t,"Discord role menus support up to 25 roles.",true).await;}
+        s.defer(id,t).await?;
         s.save_role_picker_draft(draft_id,draft.clone())?;
-        return reply_update(s,id,t,&format!("**{}**\n{}\n\n**Roles included:** {}\n\nChange the selection above or publish this menu.",draft.title,draft.description,draft.roles.len()),role_picker_setup_components(draft_id,&draft.roles)).await;
+        return s.edit_original_with_components(t,&format!("**{}**\n{}\n\n**Roles included:** {}\n\nChange the selection above or publish this menu.",draft.title,draft.description,draft.roles.len()),role_picker_setup_components(draft_id,&draft.roles)).await;
     }
     if let Some(draft_id)=custom.strip_prefix("rolepicker:publish:"){
         let draft=match s.role_picker_draft(draft_id){Some(d)=>d,None=>return s.reply(id,t,"This setup has expired. Run /setup-role-picker again.",true).await};
