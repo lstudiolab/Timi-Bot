@@ -137,8 +137,27 @@ export class Moderation {
     }catch(error){this.logger.warn("Automod sanction failed:",error.message);}
     await this.log(guild,`Anti-spam action: ${action}. Automatic warning #${warning} issued to <@${message.author.id}>. Channel: <#${message.channelId}>. Reason: ${reason}.`);
   }
+  async wordCommand(i){
+    if(!await requireManager(i))return;
+    const action=i.options.getSubcommand(),phrase=i.options.getString("phrase")?.trim();
+    const words=this.store.data.automod_words[i.guildId]||[];
+    if(action==="list")return respond(i,words.length?"**Blocked words and phrases**\n"+words.map((word,index)=>`${index+1}. ${word}`).join("\n"):"No blocked words or phrases are configured.");
+    if(!phrase)return deny(i,"Enter a non-empty word or phrase.");
+    const index=words.findIndex(word=>word.toLowerCase()===phrase.toLowerCase());
+    if(action==="add"){
+      if(index!==-1)return deny(i,"That word or phrase is already blocked.");
+      if(words.length>=100)return deny(i,"The blocked phrase list is full (100 entries).");
+      words.push(phrase);this.store.data.automod_words[i.guildId]=words;this.store.save();
+      return respond(i,`Added **${phrase}** to the blocked phrase list.`);
+    }
+    if(action==="remove"){
+      if(index===-1)return deny(i,"That word or phrase is not in the blocked list.");
+      words.splice(index,1);this.store.data.automod_words[i.guildId]=words;this.store.save();
+      return respond(i,`Removed **${phrase}** from the blocked phrase list.`);
+    }
+  }
   async handle(i){
-    if(i.isChatInputCommand()&&i.commandName==="moderation-settings")return this.command(i);
+    if(i.isChatInputCommand()&&i.commandName==="moderation-settings")return this.command(i);\n    if(i.isChatInputCommand()&&i.commandName==="automod-word")return this.wordCommand(i);
     if(i.isButton()&&i.customId.startsWith("modpanel:"))return this.component(i);
     if(i.isChannelSelectMenu()&&i.customId==="modpanel:log-select")return this.component(i);
     if(i.isModalSubmit()&&i.customId.startsWith("modpanel:"))return this.modalSubmit(i);
