@@ -11,6 +11,10 @@ const manager=new LibraryManager(store,logger),context={client,store,logger};
 const foundation=LIBRARIES.Foundation.create(context);context.foundation=foundation;
 const libraries=Object.fromEntries(Object.entries(LIBRARIES).map(([name,definition])=>[name,definition.create(context)]));
 const rest=new REST({version:"10"}).setToken(config.token);
+async function syncGlobalCommands(){
+ const registered=await rest.put(Routes.applicationCommands(config.clientId),{body:[]});
+ logger.info(`Removed ${registered.length} legacy global library commands.`);
+}
 async function syncGuildCommands(guildId){
  const installed=store.data.installed_libraries[guildId]||[];
  const body=commandsForLibraries(installed);
@@ -57,6 +61,7 @@ async function handleInteraction(i){
 }
 client.once(Events.ClientReady,async ready=>{
  logger.info(`Logged in as ${ready.user.tag}`);
+ try{await rest.put(Routes.applicationCommands(config.clientId),{body:commandsForLibraries([])});logger.info("Registered core global slash commands.");}catch(error){logger.error("Global command sync failed:",error);}
  for(const guild of ready.guilds.cache.values()){
   try{await syncGuildCommands(guild.id);}catch(error){logger.error(`Command sync failed for guild ${guild.id}:`,error);}
   for(const [name,library] of Object.entries(libraries))if(manager.installed(guild.id,name)&&library.ready)await library.ready(guild);
