@@ -379,12 +379,11 @@ impl State {
         { let mut attempts=self.callback_attempts.lock().map_err(|_|anyhow!("interaction callback lock poisoned"))?;
           if !attempts.insert(id.to_owned()){bail!("Duplicate initial response prevented for Discord interaction {id}.");} }
         let mut payload=json!({"type":kind});if let Some(d)=data{payload["data"]=d;}
-        // Discord requires the initial acknowledgement within three seconds.
-        // Keep this single-shot and bounded; generic REST retries are unsafe here.
+        // Acknowledge as soon as the handler starts. Do not apply an
+        // application-level timeout or retry this single-use callback.
+        // Discord itself still enforces its three-second acknowledgement deadline.
         let response=self.http.post(format!("{API}/interactions/{id}/{t}/callback"))
-            // Leave a safety margin inside Discord's three-second initial-response deadline.
-            // This remains single-shot: retrying an interaction callback can create duplicate acknowledgements.
-            .timeout(Duration::from_millis(2500)).json(&payload).send().await
+            .json(&payload).send().await
             .context("Discord interaction acknowledgement request failed")?;
         let status=response.status();
         let body=response.text().await.unwrap_or_default();
