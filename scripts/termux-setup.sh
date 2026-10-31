@@ -15,10 +15,10 @@ printf '\n== Updating Termux packages ==\n'
 pkg update
 pkg upgrade -y
 
-printf '\n== Installing the official Termux Lua runtime packages ==\n'
-pkg install -y git luvit lit
+printf '\n== Installing Luvit, Luvi, Lit, and Git ==\n'
+pkg install -y git luvi luvit lit
 
-for command in luvit lit; do
+for command in luvi lit luajit; do
   if ! command -v "$command" >/dev/null 2>&1; then
     printf 'Required command not found after installation: %s\n' "$command" >&2
     exit 1
@@ -37,11 +37,24 @@ fi
 printf '\n== Installing Lua dependencies ==\n'
 lit install
 
+printf '\n== Verifying required Lit dependencies ==\n'
+for module in fs json coro-http coro-websocket require; do
+  if [[ ! -d "deps/$module" && ! -f "deps/$module.lua" ]]; then
+    printf 'Missing dependency: %s. Installing explicitly...\n' "$module"
+    case "$module" in
+      fs) lit install luvit/fs@2.0.1 ;;
+      json) lit install luvit/json@2.5.1 ;;
+      coro-http) lit install luvit/coro-http@3.2.4 ;;
+      coro-websocket) lit install luvit/coro-websocket@3.1.1 ;;
+      require) lit install luvit/require@2.2.2 ;;
+    esac
+  fi
+done
+
 printf '\n== Checking Lua source syntax ==\n'
 while IFS= read -r -d '' file; do
   luajit -b "$file" /dev/null
 done < <(find . -name '*.lua' -not -path './deps/*' -not -path './.git/*' -print0)
 
 printf '\nTimi Lua runtime is prepared.\n'
-printf 'Next: nano .env  (set DISCORD_TOKEN and CLIENT_ID)\n'
-printf 'Then: luvit main.lua\n'
+printf 'Start Timi with: luvi .\n'
