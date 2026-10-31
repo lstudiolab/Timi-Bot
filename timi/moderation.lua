@@ -1,4 +1,4 @@
-local util = require("timi.util")
+local util = require("./util")
 local M = {}
 M.__index = M
 local function row(items) return util.row(items) end
