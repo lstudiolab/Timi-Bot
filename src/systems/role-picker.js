@@ -51,12 +51,12 @@ export class RolePicker {
   }
   publicPayload(menu,context={}){
     const select=new StringSelectMenuBuilder().setCustomId("rolepicker:menu:"+menu.id)
-      .setPlaceholder((menu.placeholder||"Choose roles").slice(0,150)).setMinValues(0)
+      .setPlaceholder(renderTemplate(menu.placeholder||"Choose roles",context).slice(0,150)).setMinValues(0)
       .setMaxValues(Math.max(1,Math.min(25,menu.roles.length)))
       .addOptions(menu.roles.map(role=>({label:role.name.slice(0,100),value:role.id})));
     const components=[row(select)];
     if(menu.footer_text&&menu.footer_channel_id){
-      components.push(row(button("rolepicker:footer-link:"+menu.id,menu.footer_text.slice(0,80))));
+      components.push(row(button("rolepicker:footer-link:"+menu.id,renderTemplate(menu.footer_text,context).slice(0,80))));
     }
     return {embeds:[greyEmbed(renderTemplate(menu.title,context),renderTemplate(menu.description,context))],components,allowedMentions:{parse:[]}};
   }
