@@ -36,7 +36,7 @@ async fn mod_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Resul
             // the panel has already been updated. Never let the global handler
             // overwrite that panel with a generic failure message.
             if detail.contains("10062") || detail.contains("Unknown interaction") {
-                warn!("Moderation toggle callback was already consumed by Discord; keeping the panel update and avoiding a second response.");
+                debug!("Moderation toggle callback for interaction {id} was already consumed; preserving the updated panel.");
                 return Ok(());
             }
             return Err(error);
