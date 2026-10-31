@@ -1,4 +1,4 @@
-local util = require("timi.util")
+local util = require("./util")
 local V = {}
 V.__index = V
 local DAY = 86400000
