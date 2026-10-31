@@ -1,4 +1,4 @@
-local util = require("timi.util")
+local util = require("./util")
 local T = {}
 T.__index = T
 local P = {VIEW = 1024, SEND = 2048, MANAGE_CHANNELS = 16, MANAGE_MESSAGES = 8192, MANAGE_THREADS = 2^34, CREATE_PRIVATE_THREADS = 2^36, SEND_THREADS = 2^38, HISTORY = 65536, ATTACH = 32768, EMBED = 16384, MANAGE_GUILD = 32}
