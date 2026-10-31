@@ -1,6 +1,8 @@
 import { SlashCommandBuilder, PermissionFlagsBits, ChannelType } from "discord.js";
 const manageGuild=PermissionFlagsBits.ManageGuild;
 export const commandData=[
+  new SlashCommandBuilder().setName("install-library").setDescription("Install a built-in Timi library.").addStringOption(o=>o.setName("libraryname").setDescription("Library name").setRequired(false).setMaxLength(50)),
+  new SlashCommandBuilder().setName("library-list").setDescription("Show available Timi libraries."),
   new SlashCommandBuilder().setName("ticket-setup").setDescription("Create Timi private channels and the ticket category.").setDefaultMemberPermissions(manageGuild),
   new SlashCommandBuilder().setName("ticket-panel").setDescription("Create or update the customizable ticket panel.").setDefaultMemberPermissions(manageGuild),
   new SlashCommandBuilder().setName("ticket-settings").setDescription("Edit the settings of your ticket panel.").setDefaultMemberPermissions(manageGuild),
