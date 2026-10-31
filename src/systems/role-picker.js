@@ -1,5 +1,5 @@
 import {
-  ButtonBuilder, ButtonStyle, RoleSelectMenuBuilder, StringSelectMenuBuilder,
+  ButtonStyle, RoleSelectMenuBuilder, StringSelectMenuBuilder,
   ChannelType, TextInputStyle
 } from "discord.js";
 import { requireOwner, respond, deny, modal, textInput, row, button, greyEmbed } from "../ui.js";
@@ -13,6 +13,11 @@ export class RolePicker {
       [row(button("rolepicker:start","Configure role picker",ButtonStyle.Primary))]);
   }
   async button(i){
+    if(i.customId.startsWith("rolepicker:footer-link:")){
+      const id=i.customId.slice("rolepicker:footer-link:".length),menu=this.store.data.role_picker_menus[id];
+      if(!menu||menu.guild_id!==i.guildId||!menu.footer_channel_id)return deny(i,"This link is no longer available.");
+      return respond(i,"Open the channel: https://discord.com/channels/"+menu.guild_id+"/"+menu.footer_channel_id);
+    }
     if(i.customId==="rolepicker:start"){
       if(!await requireOwner(i))return;
       return i.showModal(modal("rolepicker:details","Role picker settings",[
@@ -51,9 +56,7 @@ export class RolePicker {
       .addOptions(menu.roles.map(role=>({label:role.name.slice(0,100),value:role.id})));
     const components=[row(select)];
     if(menu.footer_text&&menu.footer_channel_id){
-      const link=new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(menu.footer_text.slice(0,80))
-        .setURL("https://discord.com/channels/"+menu.guild_id+"/"+menu.footer_channel_id);
-      components.push(row(link));
+      components.push(row(button("rolepicker:footer-link:"+menu.id,menu.footer_text.slice(0,80))));
     }
     return {embeds:[greyEmbed(menu.title,menu.description)],components,allowedMentions:{parse:[]}};
   }
