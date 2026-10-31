@@ -5,14 +5,7 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
     // Modal-opening commands must respond immediately. Other commands
     // use a task-sized thinking state while their work runs.
     if name!="create-embed"||!manage_guild(&v){
-        let thinking=match name{
-            "ticket-setup"=>Duration::from_secs(5),
-            "ticket-panel"|"verify-panel"|"verify-settings"|"setup-role-picker"=>Duration::from_secs(5),
-            "moderation-settings"|"place-embed"=>Duration::from_secs(5),
-            "ticket-settings"=>Duration::from_secs(5),
-            _=>Duration::from_secs(5),
-        };
-        s.defer_for(id,t,thinking).await?;
+        s.defer(id,t).await?;
     }
     if g.is_empty(){return s.reply(id,t,"This command can only be used in a server.",true).await;}
     match name{

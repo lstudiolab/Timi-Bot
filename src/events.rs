@@ -68,11 +68,7 @@ impl EventHandler for Handler{
                 let id=v.id.get().to_string();let token=v.token.clone();
                 let value=serde_json::to_value(&v).unwrap_or(Value::Null);
                 let custom=value.pointer("/data/custom_id").and_then(Value::as_str).unwrap_or("");
-                let thinking=if custom.starts_with("ticket:"){Duration::from_secs(5)}
-                    else if custom.starts_with("rolepicker:"){Duration::from_secs(5)}
-                    else if custom.starts_with("embed:"){Duration::from_secs(5)}
-                    else{Duration::from_secs(5)};
-                if let Err(error)=self.state.defer_for(&id,&token,thinking).await{
+                if let Err(error)=self.state.defer(&id,&token).await{
                     report_interaction_error(&self.state,&id,&token,error).await;
                     return;
                 }

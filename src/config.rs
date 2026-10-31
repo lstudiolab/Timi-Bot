@@ -414,17 +414,17 @@ impl State {
     async fn defer(&self,id:&str,t:&str)->Result<()> {
         self.defer_for(id,t,Duration::from_secs(5)).await
     }
-    async fn defer_for(&self,id:&str,t:&str,minimum:Duration)->Result<()> {
+    async fn defer_for(&self,id:&str,t:&str,_minimum:Duration)->Result<()> {
         let already_acknowledged=self.callback_acknowledged.lock()
             .map_err(|_|anyhow!("interaction acknowledgement lock poisoned"))?
             .contains(id);
         if already_acknowledged{return Ok(());}
-        // Acknowledge immediately; the minimum thinking duration is applied
-        // only when the response is updated, never inside the gateway handler.
+        // Every deferred interaction uses the same five-second thinking
+        // minimum. Record the start immediately after Discord acknowledges it.
         self.callback(id,t,5,Some(json!({"flags":64}))).await?;
         self.deferred_at.lock()
             .map_err(|_|anyhow!("deferred interaction timing lock poisoned"))?
-            .insert(t.to_owned(),(std::time::Instant::now(),minimum));
+            .insert(t.to_owned(),(std::time::Instant::now(),Duration::from_secs(5)));
         Ok(())
     }
     async fn wait_for_thinking_minimum(&self,t:&str) {
