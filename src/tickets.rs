@@ -22,7 +22,7 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
         if !staff&&!manager{return s.reply(id,t,"Only support staff can change ticket priority.",true).await;}
         let message_id=v.pointer("/message/id").and_then(Value::as_str).unwrap_or("");
         if message_id.is_empty(){return s.reply(id,t,"Could not identify this ticket message.",true).await;}
-        let menu=json!({"content":"Choose the priority for this ticket.","components":[row(vec![{"type":3,"custom_id":format!("ticket:priority-select:{message_id}"),"placeholder":"Select priority","min_values":1,"max_values":1,"options":[
+        let menu=json!({"content":"Choose the priority for this ticket.","components":[row(vec![json!({"type":3,"custom_id":format!("ticket:priority-select:{message_id}"),"placeholder":"Select priority","min_values":1,"max_values":1,"options":[
             {"label":"Low","value":"low","description":"Routine request"},
             {"label":"Normal","value":"normal","description":"Standard support request","default":true},
             {"label":"High","value":"high","description":"Needs attention soon"},
