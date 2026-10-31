@@ -80,7 +80,7 @@ export function renderTemplate(template, context = {}) {
     time: new Date().toLocaleTimeString("en-GB", { timeZone: "UTC" }),
     timestamp: Math.floor(Date.now() / 1000)
   };
-  return String(template ?? "").replace(/\\{([a-z][a-z0-9_]*)\\}/gi, (match, key) => {
+  return String(template ?? "").replace(new RegExp("[{]([a-z][a-z0-9_]*)[}]", "gi"), (match, key) => {
     const value = values[key.toLowerCase()];
     return value === null || value === undefined ? match : String(value);
   });
