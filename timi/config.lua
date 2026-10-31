@@ -1,5 +1,5 @@
 local fs = require("fs")
-local util = require("timi.util")
+local util = require("./util")
 
 local M = {}
 
