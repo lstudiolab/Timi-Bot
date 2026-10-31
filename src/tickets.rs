@@ -69,39 +69,54 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
     }
     if custom=="ticket:open"{s.defer(id,t).await?;return open_ticket(s,t,&g,&u).await;}
     if custom=="ticket:close"||custom=="ticket:confirm-close"{
-        // The first click creates the confirmation. Confirming uses a deferred
-        // ephemeral response so Discord shows its native thinking indicator.
-        if custom=="ticket:close"{s.defer(id,t).await?;}else{s.defer(id,t).await?;}
+        // Acknowledge the component as an update to its source message. This
+        // avoids creating a second ephemeral response that can fail to render.
+        s.defer_update(id,t).await?;
+        let message_id=v.pointer("/message/id").and_then(Value::as_str).unwrap_or("");
+        if !snowflake(message_id){return Ok(());}
         let ch=match s.api(Method::GET,&format!("/channels/{c}"),None).await{
-            Ok(value)=>value,Err(error)=>{error!("Could not check ticket channel {c}: {error:#}");s.edit_original(t,"Timi could not check this ticket. Try again.").await?;return Ok(());}
+            Ok(value)=>value,
+            Err(error)=>{
+                error!("Could not check ticket channel {c}: {error:#}");
+                let _=s.send(&c,json!({"content":"Timi could not check this ticket. Try again."})).await;
+                return Ok(());
+            }
         };
         let owner=ch["topic"].as_str().unwrap_or("").strip_prefix("timi-ticket-owner:").unwrap_or("").to_owned();
-        if owner.is_empty(){return s.edit_original(t,"This is not a Timi ticket channel.").await;}
-        if u!=owner&&!manager{return s.edit_original(t,"Only the ticket owner or a server manager can close this ticket.").await;}
-        if custom=="ticket:close"{return s.edit_original_with_components(t,"Are you sure you want to close this ticket?",vec![row(vec![button("ticket:confirm-close","Yes, close it",2)])]).await;}
-        // A per-ticket guard prevents duplicate close jobs while the confirmation
-        // button remains visible in Discord's ephemeral source message.
+        if owner.is_empty(){
+            let _=s.edit(&c,message_id,json!({"content":"This is not a Timi ticket channel.","components":[]})).await;
+            return Ok(());
+        }
+        if u!=owner&&!manager{
+            let _=s.send(&c,json!({"content":format!("<@{u}> Only the ticket owner or a server manager can close this ticket."),"allowed_mentions":{"users":[u]}})).await;
+            return Ok(());
+        }
+        if custom=="ticket:close"{
+            s.edit(&c,message_id,json!({"content":"Are you sure you want to close this ticket?","embeds":[],"components":[row(vec![button("ticket:confirm-close","Yes, close it",2),button("ticket:cancel-close","Cancel",2)])]})).await?;
+            return Ok(());
+        }
+        if custom=="ticket:cancel-close"{
+            return Ok(());
+        }
         let closing_key=format!("{g}:{c}");
         let already_closing={
             let mut runtime=s.runtime.lock().map_err(|_|anyhow!("runtime lock poisoned"))?;
             !runtime.closing_tickets.insert(closing_key.clone())
         };
-        if already_closing{return s.edit_original(t,"This ticket is already closing.").await;}
-        let cloned=s.clone();let guild=g.clone();let channel=c.clone();let closer=u.clone();let token=t.to_owned();let key=closing_key;
+        if already_closing{return Ok(());}
+        let cloned=s.clone();let guild=g.clone();let channel=c.clone();let closer=u.clone();let key=closing_key;
         tokio::spawn(async move{
             sleep(Duration::from_secs(5)).await;
             let result=close_ticket(&cloned,&guild,&channel,&closer).await;
             if let Ok(mut runtime)=cloned.runtime.lock(){runtime.closing_tickets.remove(&key);}
             if let Err(error)=result{
                 error!("Ticket close failed for channel {}: {error:#}",channel);
-                let _=cloned.edit_original(&token,"Timi could not finish closing this ticket.").await;
-            }else{
-                // Complete the deferred interaction without posting a visible status message.
-                let _=cloned.edit_original(&token," ").await;
+                let _=cloned.send(&channel,json!({"content":"Timi could not finish closing this ticket. Check its permissions and try again."})).await;
             }
         });
         return Ok(());
     }
+
     if !manager{return s.reply(id,t,"You need Manage Server permission to configure tickets.",true).await;}
     let x=s.ticket(&g);
     match custom{
