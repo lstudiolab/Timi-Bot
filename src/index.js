@@ -15,7 +15,7 @@ async function registerCommands(){
  const route=config.guildId?Routes.applicationGuildCommands(config.clientId,config.guildId):Routes.applicationCommands(config.clientId);
  const registered=await rest.put(route,{body:commandData});logger.info(`Registered ${registered.length} slash commands.`);
 }
-function commandLibrary(n){if(n.startsWith("ticket-"))return "Support";if(n==="moderation-settings")return "Moderation";if(["verify-settings","verify-panel","setup-role-picker","create-embed","edit-embed","place-embed"].includes(n))return "Foundation";return null;}
+function commandLibrary(n){if(n.startsWith("ticket-"))return "Support";if(n==="moderation-settings")return "Moderation";if(["verify-settings","verify-panel","setup-role-picker","create-embed","edit-embed","place-embed","ping","server-info","user-info","avatar","welcome-settings"].includes(n))return "Foundation";return null;}
 function componentLibrary(id){if(id.startsWith("ticket:"))return "Support";if(id.startsWith("modpanel:")||id.startsWith("botguard:"))return "Moderation";if(id.startsWith("verify:")||id.startsWith("rolepicker:")||id.startsWith("embed:"))return "Foundation";return null;}
 function opensModal(i){if(i.isChatInputCommand())return i.commandName==="create-embed";if(!i.isButton())return false;const id=i.customId;return id==="rolepicker:start"||id==="ticket:wizard-start"||id==="ticket:wizard-continue"||id.startsWith("ticket:edit-")||id==="modpanel:sanction"||id==="modpanel:duration"||id==="modpanel:max-count"||id.startsWith("embed:");}
 async function coreCommand(i){
@@ -49,8 +49,14 @@ client.once(Events.ClientReady,async ready=>{
 });
 client.on(Events.InteractionCreate,async i=>{try{await handleInteraction(i);}catch(error){logger.error(`Interaction ${i.id} failed:`,error);if(!i.isRepliable())return;const p={content:"Timi could not complete that action. Check bot permissions and try again.",components:[],allowedMentions:{parse:[]}};if(i.deferred||i.replied)await i.editReply(p).catch(()=>{});else await i.reply({...p,ephemeral:true}).catch(()=>{});}});
 client.on(Events.MessageCreate,m=>{if(manager.installed(m.guildId,"Moderation"))libraries.Moderation.messageCreate(m).catch(e=>logger.error("Moderation message processing failed:",e));});
-client.on(Events.GuildMemberAdd,m=>{if(manager.installed(m.guild.id,"Moderation"))libraries.Moderation.guildMemberAdd(m).catch(e=>logger.error("Member join processing failed:",e));else if(manager.installed(m.guild.id,"Foundation")){const r=store.member(m.guild.id,m.id);r.joins++;r.last_join=Date.now();store.save();}});
-client.on(Events.GuildMemberRemove,m=>{if(manager.installed(m.guild.id,"Foundation")){const r=store.member(m.guild.id,m.id);r.leaves++;store.save();}});
+client.on(Events.GuildMemberAdd,m=>{
+ if(manager.installed(m.guild.id,"Moderation"))libraries.Moderation.guildMemberAdd(m).catch(e=>logger.error("Member join processing failed:",e));
+ else if(manager.installed(m.guild.id,"Foundation")){const r=store.member(m.guild.id,m.id);r.joins++;r.last_join=Date.now();store.save();}
+ if(manager.installed(m.guild.id,"Foundation"))libraries.Foundation.guildMemberAdd(m).catch(e=>logger.error("Welcome message failed:",e));
+});
+client.on(Events.GuildMemberRemove,m=>{
+ if(manager.installed(m.guild.id,"Foundation")){const r=store.member(m.guild.id,m.id);r.leaves++;store.save();libraries.Foundation.guildMemberRemove(m).catch(e=>logger.error("Goodbye message failed:",e));}
+});
 client.on(Events.ChannelCreate,c=>{if(c.guild&&manager.installed(c.guild.id,"Moderation"))libraries.Moderation.channelCreate(c);});
 client.on(Events.ChannelUpdate,(o,c)=>{if(c.guild&&manager.installed(c.guild.id,"Moderation"))libraries.Moderation.channelUpdate(o,c);});
 client.on(Events.ChannelDelete,c=>{if(c.guild&&manager.installed(c.guild.id,"Moderation"))libraries.Moderation.channelDelete(c).catch(e=>logger.error("Recovery failed:",e));});
