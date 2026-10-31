@@ -15,7 +15,7 @@ fn role_picker_public_payload(menu:&RolePickerMenu)->Value{
         components.push(row(vec![json!({"type":2,"style":5,"label":menu.footer_text.chars().take(80).collect::<String>(),
             "url":format!("https://discord.com/channels/{}/{}",menu.guild_id,menu.footer_channel_id)})]));
     }
-    json!({"embeds":[{"color":8421504,"title":menu.title,"description":menu.description}],
+    json!({"embeds":[{"color":0x808080,"title":menu.title,"description":menu.description}],
         "components":components,"allowed_mentions":{"parse":[]}})
 }
 async fn role_picker_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Result<()>{
