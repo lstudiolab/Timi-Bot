@@ -1,6 +1,6 @@
 local http = require("coro-http")
 local json = require("json")
-local util = require("timi.util")
+local util = require("../timi/util")
 
 local Rest = {}
 Rest.__index = Rest
