@@ -1,6 +1,6 @@
 import { Client, Events, GatewayIntentBits, Partials, REST, Routes } from "discord.js";
 import { loadConfig, createLogger } from "./config.js";
-import { commandsForLibraries } from "./commands.js";
+import { commandsForLibraries, libraryCommandsForLibraries } from "./commands.js";
 import { Store } from "./store.js";
 import { LibraryManager } from "./module-manager.js";
 import { LIBRARIES } from "./libraries/index.js";
@@ -17,7 +17,7 @@ async function syncGlobalCommands(){
 }
 async function syncGuildCommands(guildId){
  const installed=store.data.installed_libraries[guildId]||[];
- const body=commandsForLibraries(installed);
+ const body=libraryCommandsForLibraries(installed);
  const route=Routes.applicationGuildCommands(config.clientId,guildId);
  const registered=await rest.put(route,{body});
  logger.info(`Synced ${registered.length} slash commands for guild ${guildId}.`);
