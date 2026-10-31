@@ -220,26 +220,60 @@ struct Runtime {
 }
 struct State {
     config:Config, http:HttpClient, store:Mutex<Store>, runtime:Mutex<Runtime>,
+    // Serialize every disk write. Direct saves and the debounce worker share this lock.
+    persist_lock:Mutex<()>,
     callback_attempts:Mutex<HashSet<String>>, callback_acknowledged:Mutex<HashSet<String>>,
 }
 impl State {
     fn new(config:Config)->Result<Arc<Self>> {
         let path=config.data_dir.join("timi.json");
-        let mut store=if path.exists(){serde_json::from_slice(&fs::read(&path)?).unwrap_or_default()}else{Store::default()};
-        if migrate_legacy_data(&config.data_dir,&mut store)? {
-            let bytes=serde_json::to_vec_pretty(&store)?;
-            let temp=config.data_dir.join("timi.json.tmp");
-            fs::write(&temp,bytes)?;
-            fs::rename(temp,&path)?;
+        let backup=config.data_dir.join("timi.json.bak");
+        let mut store=if path.exists(){
+            match serde_json::from_slice::<Store>(&fs::read(&path)?) {
+                Ok(store)=>store,
+                Err(primary_error)=>{
+                    if !backup.exists(){
+                        bail!("data/timi.json is invalid and no backup exists; refusing to reset stored data. Original error: {primary_error}");
+                    }
+                    let recovered=serde_json::from_slice::<Store>(&fs::read(&backup)?)
+                        .context("data/timi.json and data/timi.json.bak are both invalid")?;
+                    let corrupt= config.data_dir.join(format!("timi.json.corrupt-{}",now()));
+                    fs::copy(&path,&corrupt).context("Could not preserve the invalid data/timi.json file")?;
+                    warn!("Recovered Timi data from timi.json.bak; preserved the invalid file at {}.",corrupt.display());
+                    recovered
+                }
+            }
+        }else if backup.exists(){
+            serde_json::from_slice::<Store>(&fs::read(&backup)?)
+                .context("data/timi.json is missing and data/timi.json.bak is invalid")?
+        }else{Store::default()};
+        let migrated=migrate_legacy_data(&config.data_dir,&mut store)?;
+        let state=Arc::new(Self{config,http:HttpClient::builder().user_agent("TimiBot/2.0").build()?,
+            store:Mutex::new(store),runtime:Mutex::new(Runtime::default()),persist_lock:Mutex::new(()),
+            callback_attempts:Mutex::new(HashSet::new()),callback_acknowledged:Mutex::new(HashSet::new())});
+        if migrated {
+            state.persist()?;
             info!("Imported legacy Timi JSON settings and recovery records into data/timi.json.");
         }
-        Ok(Arc::new(Self{config,http:HttpClient::builder().user_agent("TimiBot/2.0").build()?,
-            store:Mutex::new(store),runtime:Mutex::new(Runtime::default()),callback_attempts:Mutex::new(HashSet::new()),callback_acknowledged:Mutex::new(HashSet::new())}))
+        Ok(state)
     }
     fn persist(&self)->Result<()> {
+        let _write_guard=self.persist_lock.lock().map_err(|_|anyhow!("persistence lock poisoned"))?;
         let data={let s=self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;serde_json::to_vec_pretty(&*s)?};
-        let path=self.config.data_dir.join("timi.json");let tmp=self.config.data_dir.join("timi.json.tmp");
-        fs::write(&tmp,data)?;fs::rename(tmp,path)?;Ok(())
+        let path=self.config.data_dir.join("timi.json");
+        let tmp=self.config.data_dir.join("timi.json.tmp");
+        let backup=self.config.data_dir.join("timi.json.bak");
+        {
+            use std::io::Write;
+            let mut file=fs::File::create(&tmp).context("Could not create temporary data file")?;
+            file.write_all(&data).context("Could not write temporary data file")?;
+            file.sync_all().context("Could not flush temporary data file")?;
+        }
+        // Keep the last known-good file before atomically replacing it.
+        if path.exists(){fs::copy(&path,&backup).context("Could not create data backup")?;}
+        fs::rename(&tmp,&path).context("Could not atomically replace data/timi.json")?;
+        if let Ok(directory)=fs::File::open(&self.config.data_dir){let _=directory.sync_all();}
+        Ok(())
     }
     fn schedule_persist(self:&Arc<Self>){
         let start={
@@ -259,7 +293,11 @@ impl State {
                     true
                 };
                 if should_write{
-                    if let Err(error)=state.persist(){error!("Debounced data persistence failed: {error:#}");}
+                    if let Err(error)=state.persist(){
+                        error!("Debounced data persistence failed; the save will be retried: {error:#}");
+                        if let Ok(mut runtime)=state.runtime.lock(){runtime.persist_dirty=true;}
+                        sleep(Duration::from_secs(2)).await;
+                    }
                 }
                 let finished={
                     let Ok(mut runtime)=state.runtime.lock() else{return;};
