@@ -33,7 +33,7 @@ async fn verify_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
     let roles=m["roles"].as_array().cloned().unwrap_or_default();
     if !settings.role_id.is_empty()&&roles.iter().any(|r|r.as_str()==Some(&settings.role_id)){return s.edit_original(t,"You are already verified.").await;}
     if !settings.required_role_id.is_empty()&&!roles.iter().any(|r|r.as_str()==Some(&settings.required_role_id)){return s.edit_original(t,"You cannot start verification yet. You must first have the configured required role.").await;}
-    s.edit_original(t,"**Timi verification in progress**\nRefreshing your account and reviewing server history…").await?;
+    // Keep Discord native thinking visible until the risk check and verification action finish.
     let user=m.get("user").cloned().unwrap_or_else(||json!({"id":u}));
     let (points,checks,age_failed)=score(s,&g,&u,&user,&settings);
     let result=verification_decision(points,age_failed,&settings.thresholds);
