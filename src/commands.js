@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, PermissionFlagsBits, ChannelType } from "discord.js";
 const manageGuild=PermissionFlagsBits.ManageGuild;
-export const commandData=[
+const allCommandBuilders=[
   new SlashCommandBuilder().setName("install-library").setDescription("Install a built-in Timi library.").addStringOption(o=>o.setName("libraryname").setDescription("Library name").setRequired(false).setMaxLength(50)),
   new SlashCommandBuilder().setName("library-list").setDescription("Show available Timi libraries."),
   new SlashCommandBuilder().setName("uninstall-library").setDescription("Disable a Timi library (server owner only).").addStringOption(o=>o.setName("libraryname").setDescription("Library name").setRequired(true).setMaxLength(50)),
@@ -42,4 +42,22 @@ export const commandData=[
     .addStringOption(o=>o.setName("welcome-message").setDescription("Welcome text; supports {user}, {username}, {server}, {member_count}").setMaxLength(1800))
     .addChannelOption(o=>o.setName("goodbye-channel").setDescription("Channel for member departure messages").addChannelTypes(ChannelType.GuildText))
     .addStringOption(o=>o.setName("goodbye-message").setDescription("Goodbye text; supports {user}, {username}, {server}, {member_count}").setMaxLength(1800))
-].map(command=>command.toJSON());
+];
+
+const commandGroups = Object.freeze({
+  Core: ["install-library","library-list","uninstall-library"],
+  Support: ["ticket-setup","ticket-panel","ticket-settings"],
+  Moderation: ["automod-word","moderation-settings"],
+  Foundation: ["verify-settings","verify-panel","setup-role-picker","create-embed","place-embed","edit-embed","ping","server-info","user-info","avatar","welcome-settings"]
+});
+const commandByName = new Map(allCommandBuilders.map(command => [command.name, command]));
+export const commandData = allCommandBuilders.map(command => command.toJSON());
+export const coreCommandData = commandGroups.Core.map(name => commandByName.get(name).toJSON());
+export function commandsForLibraries(installedLibraries = []) {
+  const names = new Set(commandGroups.Core);
+  for (const library of installedLibraries) {
+    for (const name of commandGroups[library] || []) names.add(name);
+  }
+  return [...names].map(name => commandByName.get(name)?.toJSON()).filter(Boolean);
+}
+
