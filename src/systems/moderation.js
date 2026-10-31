@@ -90,9 +90,12 @@ export class Moderation {
     this.store.data.moderation_cases[guild]=kept;this.store.save();return id;
   }
   async onMessage(message){
-    if(!message.guild||message.author.bot||!message.member)return;
-    if(message.author.id===message.guild.ownerId||message.member.permissions.has(P.Administrator)||message.member.permissions.has(P.ManageMessages))return;
-    const guild=message.guild,x=this.store.mods(guild.id);if(!x.enabled)return;
+    if(!message.guild||message.author.bot)return;
+    const guild=message.guild;
+    const member=message.member||await guild.members.fetch(message.author.id).catch(()=>null);
+    if(!member)return;
+    if(message.author.id===guild.ownerId||member.permissions.has(P.Administrator)||member.permissions.has(P.ManageMessages))return;
+    const x=this.store.mods(guild.id);if(!x.enabled)return;
     const content=message.content||"",lower=content.toLowerCase();
     for(const word of this.store.data.automod_words[guild.id]||[]){
       if(word&&lower.includes(word.toLowerCase())){
@@ -128,8 +131,8 @@ export class Moderation {
     else await message.delete().catch(()=>{});
     let action="messages deleted";
     try{
-      if(x.sanction==="timeout"){await message.member.timeout(x.timeout_minutes*60000,reason);action=`timed out for ${x.timeout_minutes} minute(s)`;}
-      else if(x.sanction==="kick"){await message.member.kick(reason);action="kicked";}
+      if(x.sanction==="timeout"){await member.timeout(x.timeout_minutes*60000,reason);action=`timed out for ${x.timeout_minutes} minute(s)`;}
+      else if(x.sanction==="kick"){await member.kick(reason);action="kicked";}
       else if(x.sanction==="ban"){await guild.members.ban(message.author.id,{deleteMessageSeconds:Math.min(60,x.action_duration_seconds),reason});action="banned";}
     }catch(error){this.logger.warn("Automod sanction failed:",error.message);}
     await this.log(guild,`Anti-spam action: ${action}. Automatic warning #${warning} issued to <@${message.author.id}>. Channel: <#${message.channelId}>. Reason: ${reason}.`);

@@ -106,8 +106,18 @@ export class Tickets {
       const thread=await ch.threads.create({name:"staff-"+cleanChannelName(i.user.username),type:ChannelType.PrivateThread,autoArchiveDuration:1440,invitable:false});
       await thread.send(`Private staff discussion for <#${ch.id}>. The ticket owner cannot see this thread.`);
       if(support) {
-        const members=await guild.members.fetch();
-        for(const member of members.values()) if(member.roles.cache.has(support.id)&&!member.user.bot) await thread.members.add(member.id).catch(()=>{});
+        let after;
+        while(true) {
+          const members=await guild.members.list({limit:1000,...(after?{after}:{})});
+          if(!members.size)break;
+          for(const member of members.values()) {
+            if(member.roles.cache.has(support.id)&&!member.user.bot) {
+              await thread.members.add(member.id).catch(error=>this.logger.warn("Could not add support member to ticket thread:",member.id,error.message));
+            }
+          }
+          after=members.last()?.id;
+          if(members.size<1000||!after)break;
+        }
       }
       note=` A private staff thread was created: <#${thread.id}>.`;
     } catch(e) { note=" The ticket is open, but Timi could not create its private staff thread. Check thread permissions."; this.logger.warn("Ticket staff thread failed:",e.message); }
