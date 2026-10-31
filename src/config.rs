@@ -225,6 +225,7 @@ struct State {
     persist_lock:Mutex<()>,
     callback_attempts:Mutex<HashSet<String>>, callback_acknowledged:Mutex<HashSet<String>>,
     deferred_at:Mutex<HashMap<String,(std::time::Instant,Duration)>>,
+    working_shown:Mutex<HashSet<String>>,
 }
 impl State {
     fn new(config:Config)->Result<Arc<Self>> {
@@ -253,7 +254,7 @@ impl State {
         let state=Arc::new(Self{config,http:HttpClient::builder().user_agent("TimiBot/2.0").build()?,
             store:Mutex::new(store),runtime:Mutex::new(Runtime::default()),persist_lock:Mutex::new(()),
             callback_attempts:Mutex::new(HashSet::new()),callback_acknowledged:Mutex::new(HashSet::new()),
-            deferred_at:Mutex::new(HashMap::new())});
+            deferred_at:Mutex::new(HashMap::new()),working_shown:Mutex::new(HashSet::new())});
         if migrated {
             state.persist()?;
             info!("Imported legacy Timi JSON settings and recovery records into data/timi.json.");
@@ -400,16 +401,21 @@ impl State {
         Ok(())
     }
     async fn reply(&self,id:&str,t:&str,text:&str,ephemeral:bool)->Result<()> {
-        // A handler may discover a validation or permission error after it has
-        // already deferred the interaction. Discord rejects a second initial
-        // callback in that case; update the acknowledged response instead.
+        // Once an interaction has been acknowledged, every response is an edit.
         let already_acknowledged=self.callback_acknowledged.lock()
             .map_err(|_|anyhow!("interaction acknowledgement lock poisoned"))?
             .contains(id);
         if already_acknowledged {
             return self.edit_original(t,text).await;
         }
-        self.callback(id,t,4,Some(json!({"content":text,"flags":if ephemeral{64}else{0}}))).await
+        // Use a deferred response so validation errors follow the same
+        // Working… -> result sequence as longer-running interactions.
+        self.callback(id,t,5,Some(json!({"flags":if ephemeral{64}else{0}}))).await?;
+        self.deferred_at.lock()
+            .map_err(|_|anyhow!("deferred interaction timing lock poisoned"))?
+            .insert(t.to_owned(),(std::time::Instant::now(),Duration::from_secs(5)));
+        self.show_working(t).await?;
+        self.edit_original(t,text).await
     }
     async fn defer(&self,id:&str,t:&str)->Result<()> {
         self.defer_for(id,t,Duration::from_secs(5)).await
@@ -419,13 +425,22 @@ impl State {
             .map_err(|_|anyhow!("interaction acknowledgement lock poisoned"))?
             .contains(id);
         if already_acknowledged{return Ok(());}
-        // Acknowledge immediately with Discord's deferred response. The
-        // user-facing Working… text is only shown when the operation begins
-        // its first response edit, not on every interaction acknowledgement.
+        // Acknowledge first, then immediately publish the common working state.
         self.callback(id,t,5,Some(json!({"flags":64}))).await?;
         self.deferred_at.lock()
             .map_err(|_|anyhow!("deferred interaction timing lock poisoned"))?
             .insert(t.to_owned(),(std::time::Instant::now(),Duration::from_secs(5)));
+        self.show_working(t).await
+    }
+    async fn show_working(&self,t:&str)->Result<()> {
+        let already_shown=self.working_shown.lock()
+            .map_err(|_|anyhow!("interaction working-state lock poisoned"))?
+            .contains(t);
+        if already_shown{return Ok(());}
+        self.send_interaction_edit(t,json!({"content":"Working…"})).await?;
+        self.working_shown.lock()
+            .map_err(|_|anyhow!("interaction working-state lock poisoned"))?
+            .insert(t.to_owned());
         Ok(())
     }
     async fn wait_for_thinking_minimum(&self,t:&str) {
@@ -435,10 +450,7 @@ impl State {
             if elapsed<minimum{sleep(minimum-elapsed).await;}
         }
     }
-    async fn edit_interaction_webhook(&self,t:&str,payload:Value)->Result<()> {
-        // Keep the thinking state visible for at least five seconds without
-        // blocking the gateway handler or delaying work on other interactions.
-        self.wait_for_thinking_minimum(t).await;
+    async fn send_interaction_edit(&self,t:&str,payload:Value)->Result<()> {
         // Interaction webhook endpoints authenticate with the interaction token
         // in the URL. Do not route these through api(), which adds Bot auth.
         let url=format!("{API}/webhooks/{}/{}/messages/@original",self.config.client_id,t);
@@ -454,6 +466,27 @@ impl State {
         if elapsed>=Duration::from_millis(1500){
             warn!("Discord interaction response edit took {} ms.",elapsed.as_millis());
         }
+        Ok(())
+    }
+    async fn edit_interaction_webhook(&self,t:&str,payload:Value)->Result<()> {
+        let is_working=payload.get("content").and_then(Value::as_str)==Some("Working…");
+        let already_shown=self.working_shown.lock()
+            .map_err(|_|anyhow!("interaction working-state lock poisoned"))?
+            .contains(t);
+        if is_working {
+            if already_shown{return Ok(());}
+            return self.show_working(t).await;
+        }
+        // Defensive fallback for any message-producing handler that edits
+        // without going through defer()/reply() first.
+        if !already_shown {
+            self.show_working(t).await?;
+        }
+        // The working state is visible immediately; keep it visible for the
+        // five-second minimum measured from the initial acknowledgement.
+        self.wait_for_thinking_minimum(t).await;
+        self.send_interaction_edit(t,payload).await?;
+        if let Ok(mut shown)=self.working_shown.lock(){shown.remove(t);}
         Ok(())
     }
     async fn edit_original(&self,t:&str,text:&str)->Result<()> {
