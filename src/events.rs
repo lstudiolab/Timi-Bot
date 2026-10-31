@@ -1,4 +1,4 @@
-async fn report_interaction_error(s:&State,id:&str,_token:&str,error:anyhow::Error){
+async fn report_interaction_error(s:&State,id:&str,token:&str,error:anyhow::Error){
     // Interaction handlers own their user-facing responses. A global fallback
     // reply can create a second initial response or overwrite a useful message
     // after a handler has already acknowledged Discord and continued its work.
@@ -6,8 +6,12 @@ async fn report_interaction_error(s:&State,id:&str,_token:&str,error:anyhow::Err
     error!("Interaction {id} failed: {error:#}");
     let acknowledged=s.take_callback_acknowledged(id);
     let attempted=s.take_callback_attempt(id);
-    if acknowledged || attempted {
-        tracing::debug!("Interaction {id} failed after its response was attempted; preserving the handler's response.");
+    if acknowledged {
+        if let Err(reply_error)=s.edit_original(token,"Timi could not complete that action. Please try again.").await {
+            warn!("Could not send the fallback response for interaction {id}: {reply_error:#}");
+        }
+    } else if attempted {
+        tracing::debug!("Interaction {id} failed before Discord confirmed its initial response.");
     }
     s.clear_callback_attempt(id);
 }

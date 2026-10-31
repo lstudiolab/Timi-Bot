@@ -224,6 +224,7 @@ struct State {
     // Serialize every disk write. Direct saves and the debounce worker share this lock.
     persist_lock:Mutex<()>,
     callback_attempts:Mutex<HashSet<String>>, callback_acknowledged:Mutex<HashSet<String>>,
+    deferred_at:Mutex<HashMap<String,std::time::Instant>>,
 }
 impl State {
     fn new(config:Config)->Result<Arc<Self>> {
@@ -251,7 +252,8 @@ impl State {
         let migrated=migrate_legacy_data(&config.data_dir,&mut store)?;
         let state=Arc::new(Self{config,http:HttpClient::builder().user_agent("TimiBot/2.0").build()?,
             store:Mutex::new(store),runtime:Mutex::new(Runtime::default()),persist_lock:Mutex::new(()),
-            callback_attempts:Mutex::new(HashSet::new()),callback_acknowledged:Mutex::new(HashSet::new())});
+            callback_attempts:Mutex::new(HashSet::new()),callback_acknowledged:Mutex::new(HashSet::new()),
+            deferred_at:Mutex::new(HashMap::new())});
         if migrated {
             state.persist()?;
             info!("Imported legacy Timi JSON settings and recovery records into data/timi.json.");
@@ -414,13 +416,27 @@ impl State {
             .map_err(|_|anyhow!("interaction acknowledgement lock poisoned"))?
             .contains(id);
         if already_acknowledged{return Ok(());}
+        // Acknowledge immediately. Never sleep in the gateway event handler:
+        // on constrained hosts that can stall later interactions and make
+        // their three-second acknowledgement deadline expire.
         self.callback(id,t,5,Some(json!({"flags":64}))).await?;
-        // Acknowledge before waiting: Discord's initial-response deadline is
-        // three seconds, while a deferred response can remain open.
-        sleep(Duration::from_secs(5)).await;
+        self.deferred_at.lock()
+            .map_err(|_|anyhow!("deferred interaction timing lock poisoned"))?
+            .insert(t.to_owned(),std::time::Instant::now());
         Ok(())
     }
+    async fn wait_for_thinking_minimum(&self,t:&str) {
+        let started=self.deferred_at.lock().ok().and_then(|mut times|times.remove(t));
+        if let Some(started)=started {
+            let minimum=Duration::from_secs(5);
+            let elapsed=started.elapsed();
+            if elapsed<minimum{sleep(minimum-elapsed).await;}
+        }
+    }
     async fn edit_interaction_webhook(&self,t:&str,payload:Value)->Result<()> {
+        // Keep the thinking state visible for at least five seconds without
+        // blocking the gateway handler or delaying work on other interactions.
+        self.wait_for_thinking_minimum(t).await;
         // Interaction webhook endpoints authenticate with the interaction token
         // in the URL. Do not route these through api(), which adds Bot auth.
         let url=format!("{API}/webhooks/{}/{}/messages/@original",self.config.client_id,t);
