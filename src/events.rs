@@ -74,6 +74,15 @@ impl EventHandler for Handler{
             Interaction::Modal(v)=>{
                 let id=v.id.get().to_string();let token=v.token.clone();
                 let value=serde_json::to_value(&v).unwrap_or(Value::Null);
+                let custom=value.pointer("/data/custom_id").and_then(Value::as_str).unwrap_or("");
+                let thinking=if custom.starts_with("ticket:"){Duration::from_millis(1800)}
+                    else if custom.starts_with("rolepicker:"){Duration::from_millis(2200)}
+                    else if custom.starts_with("embed:"){Duration::from_millis(1500)}
+                    else{Duration::from_millis(1200)};
+                if let Err(error)=self.state.defer_for(&id,&token,thinking).await{
+                    report_interaction_error(&self.state,&id,&token,error).await;
+                    return;
+                }
                 match modal_submit(&self.state,&id,&token,value).await {
                     Ok(())=>self.state.clear_callback_attempt(&id),
                     Err(e)=>report_interaction_error(&self.state,&id,&token,e).await,

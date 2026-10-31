@@ -224,7 +224,7 @@ struct State {
     // Serialize every disk write. Direct saves and the debounce worker share this lock.
     persist_lock:Mutex<()>,
     callback_attempts:Mutex<HashSet<String>>, callback_acknowledged:Mutex<HashSet<String>>,
-    deferred_at:Mutex<HashMap<String,std::time::Instant>>,
+    deferred_at:Mutex<HashMap<String,(std::time::Instant,Duration)>>,
 }
 impl State {
     fn new(config:Config)->Result<Arc<Self>> {
@@ -412,23 +412,24 @@ impl State {
         self.callback(id,t,4,Some(json!({"content":text,"flags":if ephemeral{64}else{0}}))).await
     }
     async fn defer(&self,id:&str,t:&str)->Result<()> {
+        self.defer_for(id,t,Duration::from_millis(1200)).await
+    }
+    async fn defer_for(&self,id:&str,t:&str,minimum:Duration)->Result<()> {
         let already_acknowledged=self.callback_acknowledged.lock()
             .map_err(|_|anyhow!("interaction acknowledgement lock poisoned"))?
             .contains(id);
         if already_acknowledged{return Ok(());}
-        // Acknowledge immediately. Never sleep in the gateway event handler:
-        // on constrained hosts that can stall later interactions and make
-        // their three-second acknowledgement deadline expire.
+        // Acknowledge immediately; the minimum thinking duration is applied
+        // only when the response is updated, never inside the gateway handler.
         self.callback(id,t,5,Some(json!({"flags":64}))).await?;
         self.deferred_at.lock()
             .map_err(|_|anyhow!("deferred interaction timing lock poisoned"))?
-            .insert(t.to_owned(),std::time::Instant::now());
+            .insert(t.to_owned(),(std::time::Instant::now(),minimum));
         Ok(())
     }
     async fn wait_for_thinking_minimum(&self,t:&str) {
-        let started=self.deferred_at.lock().ok().and_then(|mut times|times.remove(t));
-        if let Some(started)=started {
-            let minimum=Duration::from_secs(5);
+        let timing=self.deferred_at.lock().ok().and_then(|mut times|times.remove(t));
+        if let Some((started,minimum))=timing {
             let elapsed=started.elapsed();
             if elapsed<minimum{sleep(minimum-elapsed).await;}
         }

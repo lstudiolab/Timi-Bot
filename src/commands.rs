@@ -2,10 +2,18 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
     let name=v.pointer("/data/name").and_then(Value::as_str).unwrap_or("");
     let g=guild_id(&v);let c=channel_id(&v);let u=user_id(&v);
     let opts=v.pointer("/data/options").cloned().unwrap_or(json!([]));
-    // Discord requires modal-opening commands to respond immediately.
-    // All other commands, including denied create-embed attempts, use the
-    // shared five-second deferred response.
-    if name!="create-embed"||!manage_guild(&v){s.defer(id,t).await?;}
+    // Modal-opening commands must respond immediately. Other commands
+    // use a task-sized thinking state while their work runs.
+    if name!="create-embed"||!manage_guild(&v){
+        let thinking=match name{
+            "ticket-setup"=>Duration::from_millis(3500),
+            "ticket-panel"|"verify-panel"|"verify-settings"|"setup-role-picker"=>Duration::from_millis(2800),
+            "moderation-settings"|"place-embed"=>Duration::from_millis(2200),
+            "ticket-settings"=>Duration::from_millis(1500),
+            _=>Duration::from_millis(1200),
+        };
+        s.defer_for(id,t,thinking).await?;
+    }
     if g.is_empty(){return s.reply(id,t,"This command can only be used in a server.",true).await;}
     match name{
         "create-embed"=>{if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to create embeds.",true).await;}
