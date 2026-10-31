@@ -1,7 +1,7 @@
 
 fn embed_key_name(custom:&str)->&str{custom.rsplit(':').next().unwrap_or("")}
 fn embed_payload(e:&SavedEmbed)->Value{
-    let mut v=json!({"color":e.color});
+    let mut v=json!({"color":0x808080});
     if !e.title.is_empty(){v["title"]=json!(e.title);}
     if !e.description.is_empty(){v["description"]=json!(e.description);}
     if !e.author.is_empty(){v["author"]=json!({"name":e.author});}
@@ -13,8 +13,8 @@ fn embed_payload(e:&SavedEmbed)->Value{
     v
 }
 fn embed_editor_text(e:&SavedEmbed)->String{
-    format!("**Embed editor: {}**\n\nTitle: {}\nDescription: {}\nColor: #{:06X}\nAuthor: {}\nFooter: {}\nFields: {}\n{}\nThumbnail: {}\nImage: {}\nURL: {}\n\nChanges save automatically and update every message placed with /place-embed.",
-        e.name,if e.title.is_empty(){"—"}else{&e.title},if e.description.is_empty(){"—"}else{&e.description},e.color,
+    format!("**Embed editor: {}**\n\nTitle: {}\nDescription: {}\nColor: #808080\nAuthor: {}\nFooter: {}\nFields: {}\n{}\nThumbnail: {}\nImage: {}\nURL: {}\n\nChanges save automatically and update every message placed with /place-embed.",
+        e.name,if e.title.is_empty(){"—"}else{&e.title},if e.description.is_empty(){"—"}else{&e.description},
         if e.author.is_empty(){"—"}else{&e.author},if e.footer.is_empty(){"—"}else{&e.footer},e.fields.len(),
         if e.fields.is_empty(){ "No fields".to_owned() }else{e.fields.iter().enumerate().map(|(i,f)|format!("{}. {}{}",i+1,f.name,if f.inline{" (inline)"}else{""})).collect::<Vec<_>>().join("\\n")},
         if e.thumbnail.is_empty(){"—"}else{"Set"},if e.image.is_empty(){"—"}else{"Set"},if e.url.is_empty(){"—"}else{&e.url})
@@ -36,7 +36,7 @@ async fn embed_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Res
     if e.creator_id!=u&&!manage_guild(v){return s.reply(id,t,"Only the embed creator or a server manager can edit it.",true).await;}
     let modal_data=match custom.split(':').nth(1).unwrap_or(""){
         "content"=>Some(modal(&format!("embed:content:{name}"),"Edit embed content",vec![input("title","Title",&e.title,false,256),input("description","Description",&e.description,true,4000)])),
-        "style"=>Some(modal(&format!("embed:style:{name}"),"Edit embed appearance",vec![optional_input("color","Hex color (e.g. 5865F2)",&format!("{:06X}",e.color),false,6),optional_input("author","Author",&e.author,false,256),optional_input("footer","Footer",&e.footer,false,2048)])),
+        "style"=>Some(modal(&format!("embed:style:{name}"),"Edit embed appearance",vec![optional_input("author","Author",&e.author,false,256),optional_input("footer","Footer",&e.footer,false,2048)])),
         "media"=>Some(modal(&format!("embed:media:{name}"),"Edit embed images and link",vec![optional_input("thumbnail","Thumbnail image URL",&e.thumbnail,false,500),optional_input("image","Main image URL",&e.image,false,500),optional_input("url","Title URL",&e.url,false,500)])),
         "add-field"=>Some(modal(&format!("embed:add-field:{name}"),"Add embed field",vec![input("field-name","Field name","",false,256),input("field-value","Field value","",true,1024),optional_input("inline","Inline? type true or false","false",false,5)])),
         "remove-field"=>Some(modal(&format!("embed:remove-field:{name}"),"Remove embed field",vec![input("field-index","Field number to remove (1-based)","",false,2)])),
@@ -64,11 +64,7 @@ async fn embed_modal_submit(s:&Arc<State>,t:&str,v:&Value,custom:&str,fields:&Ha
     match custom.split(':').nth(1).unwrap_or(""){
         "content"=>{e.title=fields.get("title").cloned().unwrap_or_default().trim().into();e.description=fields.get("description").cloned().unwrap_or_default().trim().into();}
         "style"=>{
-            if let Some(color)=fields.get("color").filter(|v|!v.trim().is_empty()){
-                let value=color.trim().trim_start_matches('#');
-                if value.len()!=6||!value.chars().all(|c|c.is_ascii_hexdigit()){return s.edit_original(t,"Color must be a six-digit hex value, such as 5865F2.").await;}
-                e.color=u32::from_str_radix(value,16)?;
-            }
+            e.color=0x808080;
             e.author=fields.get("author").cloned().unwrap_or_default().trim().into();e.footer=fields.get("footer").cloned().unwrap_or_default().trim().into();
         }
         "media"=>{
