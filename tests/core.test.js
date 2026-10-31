@@ -95,3 +95,15 @@ test("library installation is isolated per server and preserves data",()=>{
     assert.equal(new Store(dir,quiet).ticket("guild-a").panel_title,"Saved support");
   }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+import { commandData } from "../src/commands.js";
+test("library management commands are registered with the intended option behavior",()=>{
+  const install=commandData.find(command=>command.name==="install-library");
+  const uninstall=commandData.find(command=>command.name==="uninstall-library");
+  const list=commandData.find(command=>command.name==="library-list");
+  assert.ok(install&&uninstall&&list);
+  assert.equal(install.options[0].name,"libraryname");
+  assert.equal(install.options[0].required,false);
+  assert.equal(uninstall.options[0].required,true);
+  assert.ok(commandData.some(command=>command.name==="automod-word"));
+});
