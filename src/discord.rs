@@ -14,7 +14,7 @@ fn parse_modal(v:&Value)->HashMap<String,String>{
         if let Some(a)=x.as_array(){for v in a{walk(v,out);}}if let Some(o)=x.as_object(){for v in o.values(){if v.is_array(){walk(v,out);}}}}
     let mut out=HashMap::new();walk(v,&mut out);out
 }
-fn button(id:&str,label:&str,style:u8)->Value{json!({"type":2,"style":style,"custom_id":id,"label":label})}
+fn button(id:&str,label:&str,_style:u8)->Value{json!({"type":2,"style":2,"custom_id":id,"label":label})}
 fn row(items:Vec<Value>)->Value{json!({"type":1,"components":items})}
 fn input(id:&str,label:&str,value:&str,paragraph:bool,max:u64)->Value{json!({"type":4,"custom_id":id,"label":label,"style":if paragraph{2}else{1},"required":true,"max_length":max,"value":value.chars().take(max as usize).collect::<String>()})}
 fn modal(id:&str,title:&str,items:Vec<Value>)->Value{json!({"custom_id":id,"title":title,"components":items.into_iter().map(|v|row(vec![v])).collect::<Vec<_>>()})}
