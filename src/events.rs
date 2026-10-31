@@ -8,7 +8,7 @@ async fn report_interaction_error(s:&State,id:&str,token:&str,error:anyhow::Erro
     let acknowledged=s.take_callback_acknowledged(id);
     let attempted=s.take_callback_attempt(id);
     if acknowledged || attempted {
-        debug!("Interaction {id} failed after its response was attempted; preserving the existing interaction message.");
+        tracing::debug!("Interaction {id} failed after its response was attempted; preserving the existing interaction message.");
         s.clear_callback_attempt(id);
         return;
     }
