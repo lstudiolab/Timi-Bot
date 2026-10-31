@@ -82,12 +82,12 @@ async fn bot_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Resul
         }
         s.runtime.lock().ok().map(|mut r|r.pending_bots.remove(&key));
         let content=if bot_member.is_some(){"Bot rejected and removed from the server."}else{"Bot was already no longer in the server; the approval request was cleared."};
-        return s.callback(id,t,7,Some(json!({"content":content,"embeds":[],"components":[]}))).await;
+        return s.edit_original_with_components(t,content,Vec::new()).await;
     }
     if decision=="yes"{
         if bot_member.is_none(){
             s.runtime.lock().ok().map(|mut r|r.pending_bots.remove(&key));
-            return s.callback(id,t,7,Some(json!({"content":"The bot left before approval was completed. The request has been cleared.","embeds":[],"components":[]}))).await;
+            return s.edit_original_with_components(t,"The bot left before approval was completed. The request has been cleared.",Vec::new()).await;
         }
         let channels=s.api(Method::GET,&format!("/guilds/{g}/channels"),None).await?;
         let mut failures=0usize;
@@ -112,7 +112,7 @@ async fn bot_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Resul
         }else{
             "Bot approved, but Timi could not update every temporary channel restriction. Check Manage Channels permission and review the bot's channel permissions."
         };
-        return s.callback(id,t,7,Some(json!({"content":content,"embeds":[],"components":[]}))).await;
+        return s.edit_original_with_components(t,content,Vec::new()).await;
     }
     Ok(())
 }
