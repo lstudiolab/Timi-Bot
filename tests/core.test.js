@@ -56,6 +56,25 @@ test("persistent store saves defaults and reloads settings",()=>{
     assert.ok(fs.existsSync(path.join(dir,"timi.json")));
   }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+test("pending moderation jobs survive a bot restart",()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),"timi-moderation-jobs-"));
+  try{
+    const store=new Store(dir,quiet);
+    store.data.moderation_jobs["guild-a"]=[{
+      id:"automod:guild-a:message-a",type:"automod-sanction",status:"pending",
+      guild_id:"guild-a",user_id:"user-a",channel_id:"channel-a",message_ids:["message-a"],
+      reason:"message burst",steps:{deleted:true,sanction:false,logged:false},attempts:1
+    }];
+    store.save();
+    const restarted=new Store(dir,quiet);
+    const [job]=restarted.data.moderation_jobs["guild-a"];
+    assert.equal(job.status,"pending");
+    assert.equal(job.steps.deleted,true);
+    assert.equal(job.steps.sanction,false);
+    assert.equal(job.id,"automod:guild-a:message-a");
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
 test("legacy configuration files are imported without overwriting new data",()=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),"timi-legacy-"));
   try{
