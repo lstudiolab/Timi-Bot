@@ -50,8 +50,21 @@ export class Tickets {
     return respond(i,`Ticket panel published or updated in <#${dest.id}>.`);
   }
   async publish(guild,current,settings) {
-    const dest=await guild.channels.fetch(settings.panel_channel_id||current.id);
-    if (!dest?.isTextBased()) throw new Error("The configured ticket panel destination is not a text channel.");
+    let dest=null;
+    if(settings.panel_channel_id){
+      dest=await guild.channels.fetch(settings.panel_channel_id).catch(error=>{
+        this.logger.warn("Saved ticket panel destination is unavailable; falling back to the current channel:",error.message);
+        return null;
+      });
+      if(!dest||!dest.isTextBased()||dest.guildId!==guild.id){
+        settings.panel_channel_id=null;
+        settings.published_panels=(settings.published_panels||[]).filter(p=>p.channel_id!==settings.panel_channel_id);
+        this.logger.warn("Cleared an invalid saved ticket panel destination.");
+        dest=null;
+      }
+    }
+    dest=dest||current;
+    if(!dest?.isTextBased()||dest.guildId!==guild.id) throw new Error("Run the ticket panel command in a server text channel, or configure a valid panel destination.");
     const existing=(settings.published_panels||[]).find(p=>p.channel_id===dest.id);
     if (existing) {
       const old=await dest.messages.fetch(existing.message_id).catch(()=>null);
