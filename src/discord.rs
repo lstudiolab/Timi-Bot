@@ -61,6 +61,9 @@ async fn register_commands(s:&State)->Result<()>{
         {"name":"setup-role-picker","description":"Create a self-service role picker menu (server owner only)."},
         {"name":"create-embed","description":"Create and customize a reusable server embed.","default_member_permissions":"32"},
         {"name":"place-embed","description":"Place a saved embed in this channel.","default_member_permissions":"32","options":[{"type":3,"name":"name","description":"Name of the saved embed","required":true,"max_length":24}]},
+        {"name":"edit-embed","description":"Open the editor for a saved embed.","default_member_permissions":"32","options":[{"type":3,"name":"name","description":"Name of the saved embed","required":true,"max_length":24}]},
+        {"name":"create-embed","description":"Create and customize a reusable server embed.","default_member_permissions":"32"},
+        {"name":"place-embed","description":"Place a saved embed in this channel.","default_member_permissions":"32","options":[{"type":3,"name":"name","description":"Name of the saved embed","required":true,"max_length":24}]},
         {"name":"edit-embed","description":"Open the editor for a saved embed.","default_member_permissions":"32","options":[{"type":3,"name":"name","description":"Name of the saved embed","required":true,"max_length":24}]}
     ]);
     let path=if let Some(g)=&s.config.guild_id{format!("/applications/{}/guilds/{g}/commands",s.config.client_id)}else{format!("/applications/{}/commands",s.config.client_id)};
