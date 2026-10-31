@@ -43,7 +43,7 @@ if [[ ! -f deps/luvit/init.lua ]]; then
   exit 1
 fi
 
-for module in coro-http coro-websocket; do
+for module in fs json coro-http coro-websocket; do
   if [[ ! -d "deps/$module" && ! -f "deps/$module.lua" && ! -f "deps/$module/init.lua" ]]; then
     printf 'Required dependency was not installed: %s\n' "$module" >&2
     exit 1
