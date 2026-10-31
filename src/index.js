@@ -4,7 +4,7 @@ import { commandsForLibraries, libraryCommandsForLibraries } from "./commands.js
 import { Store } from "./store.js";
 import { LibraryManager } from "./module-manager.js";
 import { LIBRARIES } from "./libraries/index.js";
-import { startWorking, respond } from "./ui.js";
+import { startWorking, respond, finishWorking } from "./ui.js";
 const config=loadConfig(),logger=createLogger(config.logLevel),store=new Store(config.dataDir,logger);
 const client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMembers,GatewayIntentBits.GuildModeration,GatewayIntentBits.GuildMessages,GatewayIntentBits.MessageContent],partials:[Partials.Channel,Partials.Message,Partials.GuildMember]});
 const manager=new LibraryManager(store,logger),context={client,store,logger};
@@ -77,7 +77,20 @@ client.once(Events.ClientReady,async ready=>{
   for(const [name,library] of Object.entries(libraries))if(manager.installed(guild.id,name)&&library.ready)await library.ready(guild);
  }
 });
-client.on(Events.InteractionCreate,async i=>{try{await handleInteraction(i);}catch(error){logger.error(`Interaction ${i.id} failed:`,error);if(!i.isRepliable())return;const p={content:"Timi could not complete that action. Check bot permissions and try again.",components:[],allowedMentions:{parse:[]}};if(i.deferred||i.replied)await i.editReply(p).catch(()=>{});else await i.reply({...p,ephemeral:true}).catch(()=>{});}});
+client.on(Events.InteractionCreate,async i=>{
+ logger.info(`Interaction received: ${i.type} ${i.commandName||i.customId||"unknown"} (${i.id})`);
+ try{
+  await handleInteraction(i);
+  await finishWorking(i);
+  logger.info(`Interaction completed: ${i.id}`);
+ }catch(error){
+  logger.error(`Interaction ${i.id} failed:`,error);
+  if(!i.isRepliable())return;
+  const p={content:"Timi could not complete that action. Check bot permissions and try again.",components:[],allowedMentions:{parse:[]}};
+  if(i.deferred||i.replied)await i.editReply(p).catch(()=>{});
+  else await i.reply({...p,ephemeral:true}).catch(()=>{});
+ }
+});
 client.on(Events.MessageCreate,m=>{if(manager.installed(m.guildId,"Moderation"))libraries.Moderation.messageCreate(m).catch(e=>logger.error("Moderation message processing failed:",e));});
 client.on(Events.MessageDelete,m=>{if(m.guild&&manager.installed(m.guild.id,"Moderation"))libraries.Moderation.messageDelete(m).catch(e=>logger.error("Message delete log failed:",e));});
 client.on(Events.MessageUpdate,(oldMessage,newMessage)=>{if(newMessage.guild&&manager.installed(newMessage.guild.id,"Moderation"))libraries.Moderation.messageUpdate(oldMessage,newMessage).catch(e=>logger.error("Message edit log failed:",e));});
