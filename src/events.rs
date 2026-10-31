@@ -1,11 +1,14 @@
-async fn report_interaction_error(s:&State,id:&str,_token:&str,error:anyhow::Error){
-    // A deferred interaction already displays Discord's native
-    // "Timi is thinking..." state. Do not replace it with a generic error:
-    // that causes a visible error flash before a later task can publish its
-    // actual result. Action handlers are responsible for user-facing errors.
+async fn report_interaction_error(s:&State,id:&str,token:&str,error:anyhow::Error){
     error!("Interaction {id} failed: {error:#}");
-    s.take_callback_acknowledged(id);
+    // If the interaction was acknowledged, replace Working… with a final
+    // failure response instead of leaving the user on a permanent spinner.
+    let acknowledged=s.take_callback_acknowledged(id);
     s.take_callback_attempt(id);
+    if acknowledged {
+        if let Err(edit_error)=s.edit_original(token,"Timi couldn't complete that action. Please try again.").await {
+            error!("Could not publish the interaction failure response for {id}: {edit_error:#}");
+        }
+    }
     s.clear_callback_attempt(id);
 }
 
