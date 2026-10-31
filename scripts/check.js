@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
 const roots=["src","tests","scripts"];
 const files=[];
@@ -12,12 +13,12 @@ function walk(dir){
   }
 }
 for(const root of roots)if(fs.existsSync(root))walk(root);
-files.push("package.json");
-let failed=false;
 for(const file of files){
-  if(file.endsWith("package.json")){JSON.parse(fs.readFileSync(file,"utf8"));continue;}
   const result=spawnSync(process.execPath,["--check",file],{encoding:"utf8"});
-  if(result.status!==0){failed=true;console.error(result.stderr||result.stdout);}
+  if(result.status!==0){console.error(result.stderr||result.stdout);process.exit(1);}
 }
-if(failed)process.exit(1);
-console.log(`Syntax check passed for ${files.length-1} JavaScript files.`);
+JSON.parse(fs.readFileSync("package.json","utf8"));
+
+const importable=files.filter(file=>file.startsWith("src/")&&!["src/index.js","src/deploy-commands.js"].includes(file));
+for(const file of importable)await import(pathToFileURL(path.resolve(file)).href);
+console.log(`Syntax and import checks passed for ${files.length} JavaScript files; ${importable.length} application modules loaded.`);
