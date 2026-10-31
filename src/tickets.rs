@@ -79,16 +79,21 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
         if owner.is_empty(){return s.edit_original(t,"This is not a Timi ticket channel.").await;}
         if u!=owner&&!manager{return s.edit_original(t,"Only the ticket owner or a server manager can close this ticket.").await;}
         if custom=="ticket:close"{return s.edit_original_with_components(t,"Are you sure you want to close this ticket?",vec![row(vec![button("ticket:confirm-close","Yes, close it",2)])]).await;}
-        // Disable the source button immediately, while keeping the interaction
-        // response in its native thinking state during the close operation.
-        let message_id=v.pointer("/message/id").and_then(Value::as_str).unwrap_or("");
-        if !message_id.is_empty(){
-            s.edit(&c,message_id,json!({"components":[]})).await?;
+        // A per-ticket guard prevents duplicate close jobs while the confirmation
+        // button remains visible in Discord's ephemeral source message.
+        let closing_key=format!("{g}:{c}");
+        {
+            let mut runtime=s.runtime.lock().map_err(|_|anyhow!("runtime lock poisoned"))?;
+            if !runtime.closing_tickets.insert(closing_key.clone()){
+                return s.edit_original(t,"This ticket is already closing.").await;
+            }
         }
-        let cloned=s.clone();let guild=g.clone();let channel=c.clone();let closer=u.clone();let token=t.to_owned();
+        let cloned=s.clone();let guild=g.clone();let channel=c.clone();let closer=u.clone();let token=t.to_owned();let key=closing_key;
         tokio::spawn(async move{
             sleep(Duration::from_secs(5)).await;
-            if let Err(error)=close_ticket(&cloned,&guild,&channel,&closer).await{
+            let result=close_ticket(&cloned,&guild,&channel,&closer).await;
+            if let Ok(mut runtime)=cloned.runtime.lock(){runtime.closing_tickets.remove(&key);}
+            if let Err(error)=result{
                 error!("Ticket close failed for channel {}: {error:#}",channel);
                 let _=cloned.edit_original(&token,"Timi could not finish closing this ticket.").await;
             }else{
