@@ -36,7 +36,8 @@ export class Embeds {
     for(const p of x.placements||[]){
       try{
         const channel=await this.client.channels.fetch(p.channel_id),message=await channel.messages.fetch(p.message_id);
-        await message.edit({embeds:[this.payload(x)],allowedMentions:{parse:[]}});
+        const user=await this.client.users.fetch(x.creator_id).catch(()=>null);
+        await message.edit({embeds:[this.payload(x,{guild:channel.guild,user,channel,client:this.client})],allowedMentions:{parse:[]}});
       }catch(error){this.logger.warn("Could not refresh saved embed:",error.message);}
     }
   }
