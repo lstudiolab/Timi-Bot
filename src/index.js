@@ -15,7 +15,7 @@ async function registerCommands(){
  const route=config.guildId?Routes.applicationGuildCommands(config.clientId,config.guildId):Routes.applicationCommands(config.clientId);
  const registered=await rest.put(route,{body:commandData});logger.info(`Registered ${registered.length} slash commands.`);
 }
-function commandLibrary(n){if(n.startsWith("ticket-"))return "Support";if(n==="moderation-settings")return "Moderation";if(["verify-settings","verify-panel","setup-role-picker","create-embed","edit-embed","place-embed","ping","server-info","user-info","avatar","welcome-settings"].includes(n))return "Foundation";return null;}
+function commandLibrary(n){if(n.startsWith("ticket-"))return "Support";if(["moderation-settings","automod-word"].includes(n))return "Moderation";if(["verify-settings","verify-panel","setup-role-picker","create-embed","edit-embed","place-embed","ping","server-info","user-info","avatar","welcome-settings"].includes(n))return "Foundation";return null;}
 function componentLibrary(id){if(id.startsWith("ticket:"))return "Support";if(id.startsWith("modpanel:")||id.startsWith("botguard:"))return "Moderation";if(id.startsWith("verify:")||id.startsWith("rolepicker:")||id.startsWith("embed:"))return "Foundation";return null;}
 function opensModal(i){if(i.isChatInputCommand())return i.commandName==="create-embed";if(!i.isButton())return false;const id=i.customId;return id==="rolepicker:start"||id==="ticket:wizard-start"||id==="ticket:wizard-continue"||id.startsWith("ticket:edit-")||id==="modpanel:sanction"||id==="modpanel:duration"||id==="modpanel:max-count"||id.startsWith("embed:");}
 async function coreCommand(i){
