@@ -15,7 +15,7 @@ Timi is a Discord bot implemented in Lua. It connects directly to Discord Gatewa
 
 ## Requirements
 
-- Luvit runtime (LuaJIT-based)
+- Luvi runtime (LuaJIT-based)
 - Lit package manager
 - A Discord application and bot token
 - OAuth scopes: `bot` and `applications.commands`
@@ -24,13 +24,13 @@ Timi is a Discord bot implemented in Lua. It connects directly to Discord Gatewa
 
 ## Install dependencies
 
-Install Luvit, Luvi, and Lit for your platform. From the repository directory, install the project dependencies:
+Install Luvi and Lit for your platform. The project manifest pins the complete Luvit runtime and matching module loader. From the repository directory, install the project dependencies:
 
 ```sh
 lit install
 ```
 
-The package manifest installs the Luvit require loader, filesystem and JSON modules, HTTP, and WebSocket modules.
+The package manifest installs Luvit 2.18.1 as a complete, version-matched runtime, plus HTTP and WebSocket modules.
 
 ## Termux setup (Android)
 
@@ -44,7 +44,7 @@ cd Timi-Bot
 bash scripts/termux-setup.sh
 ```
 
-The setup script installs `luvi`, `luvit`, and `lit`, installs and verifies project dependencies, and checks every Lua source file. It creates `.env` from `.env.example` only when `.env` does not already exist.
+The setup script installs `luvi` and `lit`, installs the pinned Luvit runtime and application dependencies together, and checks every Lua source file. Do not launch this project with the separately packaged system `luvit` command; use the project runtime through `luvi .`. It creates `.env` from `.env.example` only when `.env` does not already exist.
 
 Your existing `.env` is preserved. Start Timi from the repository root with:
 
