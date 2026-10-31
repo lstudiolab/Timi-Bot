@@ -1,23 +1,11 @@
--- Luvi can execute this entry point with LuaJIT's standard require loader.
--- Lit installs dependencies under ./deps, so include both single-file packages
--- (deps/name.lua) and directory packages (deps/name/init.lua) before imports.
-local function add_module_path(pattern)
-  if not package.path:find(pattern, 1, true) then
-    package.path = pattern .. ";" .. package.path
-  end
-end
-
-add_module_path("./deps/?.lua")
-add_module_path("./deps/?/init.lua")
-
-local config_module = require("timi.config")
-local Store = require("timi.store")
-local Rest = require("discord.rest")
-local Interactions = require("discord.interactions")
-local Gateway = require("discord.gateway")
-local util = require("timi.util")
-local Commands = require("timi.commands")
-local Events = require("timi.events")
+local config_module = require("./timi/config")
+local Store = require("./timi/store")
+local Rest = require("./discord/rest")
+local Interactions = require("./discord/interactions")
+local Gateway = require("./discord/gateway")
+local util = require("./timi/util")
+local Commands = require("./timi/commands")
+local Events = require("./timi/events")
 
 local function boot()
   math.randomseed(os.time())
