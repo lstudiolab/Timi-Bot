@@ -32,6 +32,40 @@ lit install
 
 The package manifest installs `luvit/coro-http` and `luvit/coro-websocket`.
 
+## Termux setup (Android)
+
+The official Termux package repository provides the Luvit runtime and Lit package manager. From the Timi repository directory, run:
+
+```sh
+bash scripts/termux-setup.sh
+```
+
+The setup script updates Termux, installs `luvit` and `lit`, installs the project dependencies, and checks every Lua source file. It creates `.env` from `.env.example` only when `.env` does not already exist.
+
+Then configure credentials:
+
+```sh
+nano .env
+```
+
+Set `DISCORD_TOKEN` and `CLIENT_ID`, save, then start Timi:
+
+```sh
+luvit main.lua
+```
+
+To keep Timi running in a Termux session after closing the terminal view, install and use `tmux`:
+
+```sh
+pkg install tmux
+tmux new -s timi
+luvit main.lua
+```
+
+Detach with `Ctrl+B`, then `D`; return with `tmux attach -t timi`. Termux must remain installed and Android must not kill its background process.
+
+Termux is an Android environment. It does not run natively on iOS.
+
 ## Configuration
 
 ```sh
