@@ -31,8 +31,8 @@ async fn mod_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Resul
         s.queue_mods(&g,next.clone())?;
         return s.edit_original_with_components(t,&mod_text(&next),mod_components(&next)).await;
     }
-    // Acknowledge other component clicks before saving or making REST calls.
-    s.callback(id,t,6,None).await?;
+    // Show the native thinking indicator before saving or making REST calls.
+    s.defer(id,t).await?;
     if custom=="modpanel:log-select"{
         let selected=v.pointer("/data/values/0").and_then(Value::as_str).unwrap_or("");
         if !snowflake(selected){return s.edit_original(t,"Select a valid text channel.").await;}
