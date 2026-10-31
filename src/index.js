@@ -52,8 +52,10 @@ client.on(Events.InteractionCreate,async i=>{try{await handleInteraction(i);}cat
 client.on(Events.MessageCreate,m=>{if(manager.installed(m.guildId,"Moderation"))libraries.Moderation.messageCreate(m).catch(e=>logger.error("Moderation message processing failed:",e));});
 client.on(Events.GuildMemberAdd,m=>{
  if(manager.installed(m.guild.id,"Moderation"))libraries.Moderation.guildMemberAdd(m).catch(e=>logger.error("Member join processing failed:",e));
- else if(manager.installed(m.guild.id,"Foundation")){const r=store.member(m.guild.id,m.id);r.joins++;r.last_join=Date.now();store.save();}
- if(manager.installed(m.guild.id,"Foundation"))libraries.Foundation.guildMemberAdd(m).catch(e=>logger.error("Welcome message failed:",e));
+ if(manager.installed(m.guild.id,"Foundation")){
+  if(!manager.installed(m.guild.id,"Moderation")){const r=store.member(m.guild.id,m.id);r.joins++;r.last_join=Date.now();store.save();}
+  libraries.Foundation.guildMemberAdd(m).catch(e=>logger.error("Welcome message failed:",e));
+ }
 });
 client.on(Events.GuildMemberRemove,m=>{
  if(manager.installed(m.guild.id,"Foundation")){const r=store.member(m.guild.id,m.id);r.leaves++;store.save();libraries.Foundation.guildMemberRemove(m).catch(e=>logger.error("Goodbye message failed:",e));}
