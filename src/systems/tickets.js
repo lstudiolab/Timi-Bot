@@ -104,7 +104,7 @@ export class Tickets {
         settings.published_panels.push({channel_id:dest.id,message_id:sent.id});
       }
     }else{
-      const sent=await dest.send(this.payload(settings));
+      const sent=await dest.send(this.payload(settings,{guild,channel:dest,client:this.client}));
       settings.published_panels.push({channel_id:dest.id,message_id:sent.id});
     }
 
