@@ -3,7 +3,7 @@ import {
   ChannelType, TextInputStyle
 } from "discord.js";
 import { requireOwner, respond, deny, modal, textInput, row, button, greyEmbed } from "../ui.js";
-import { isSnowflake } from "../utils.js";
+import { isSnowflake, renderTemplate } from "../utils.js";
 
 export class RolePicker {
   constructor(client,store,logger,verification){this.client=client;this.store=store;this.logger=logger;this.verification=verification;}
@@ -43,13 +43,13 @@ export class RolePicker {
       const menuId=Date.now()+"-"+i.id;
       const menu={id:menuId,guild_id:i.guildId,channel_id:draft.channel_id,title:draft.title,description:draft.description,
         placeholder:draft.placeholder,footer_text:draft.footer_text,footer_channel_id:draft.footer_channel_id,roles,selections:{}};
-      const channel=await i.guild.channels.fetch(menu.channel_id),sent=await channel.send(this.publicPayload(menu));
+      const channel=await i.guild.channels.fetch(menu.channel_id),sent=await channel.send(this.publicPayload(menu,{guild:i.guild,user:i.user,member:i.member,channel,client:this.client}));
       menu.message_id=sent.id;this.store.data.role_picker_menus[menuId]=menu;
       delete this.store.data.role_picker_drafts[id];this.store.save();
       return respond(i,`Role picker menu published in <#${channel.id}>. You can create another menu with /setup-role-picker.`);
     }
   }
-  publicPayload(menu){
+  publicPayload(menu,context={}){
     const select=new StringSelectMenuBuilder().setCustomId("rolepicker:menu:"+menu.id)
       .setPlaceholder((menu.placeholder||"Choose roles").slice(0,150)).setMinValues(0)
       .setMaxValues(Math.max(1,Math.min(25,menu.roles.length)))
@@ -58,7 +58,7 @@ export class RolePicker {
     if(menu.footer_text&&menu.footer_channel_id){
       components.push(row(button("rolepicker:footer-link:"+menu.id,menu.footer_text.slice(0,80))));
     }
-    return {embeds:[greyEmbed(menu.title,menu.description)],components,allowedMentions:{parse:[]}};
+    return {embeds:[greyEmbed(renderTemplate(menu.title,context),renderTemplate(menu.description,context))],components,allowedMentions:{parse:[]}};
   }
   async modalSubmit(i){
     if(i.customId!=="rolepicker:details")return;
