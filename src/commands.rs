@@ -24,13 +24,17 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             s.edit_original(t,&format!("Warning #{case_id} recorded for <@{target}>.")).await
         }
         "warnings"=>{
-            if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}let target=opt_str(&opts,"member").unwrap_or_default();
+            if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}
+            s.defer(id,t).await?;
+            let target=opt_str(&opts,"member").unwrap_or_default();
             let cases=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?.moderation_cases.get(&g).cloned().unwrap_or_default();
             let rows=cases.iter().filter(|x|x["user_id"].as_str()==Some(&target)&&x["type"]=="warning").rev().take(15).map(|x|format!("#{0} — {1} — <t:{2}:R>",x["id"],x["reason"].as_str().unwrap_or("No reason"),x["created_at"].as_i64().unwrap_or(0)/1000)).collect::<Vec<_>>();
-            s.reply(id,t,&if rows.is_empty(){format!("No warnings for <@{target}>.")}else{rows.join("\n")},true).await
+            s.edit_original(t,&if rows.is_empty(){format!("No warnings for <@{target}>.")}else{rows.join("\n")}).await
         }
         "clear-warnings"=>{
-            if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}let target=opt_str(&opts,"member").unwrap_or_default();
+            if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}
+            s.defer(id,t).await?;
+            let target=opt_str(&opts,"member").unwrap_or_default();
             let n={
                 let mut store=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;
                 let cases=store.moderation_cases.entry(g.clone()).or_default();
@@ -39,10 +43,12 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
                 before-cases.len()
             };
             s.persist()?;
-            s.reply(id,t,&format!("Cleared {n} warning(s) for <@{target}>."),true).await
+            s.edit_original(t,&format!("Cleared {n} warning(s) for <@{target}>.")).await
         }
         "automod-word"=>{
-            if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}let action=opt_str(&opts,"action").unwrap_or_default();let word=opt_str(&opts,"word").unwrap_or_default().trim().to_lowercase();
+            if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}
+            s.defer(id,t).await?;
+            let action=opt_str(&opts,"action").unwrap_or_default();let word=opt_str(&opts,"word").unwrap_or_default().trim().to_lowercase();
             if action=="add"&&(word.len()<2||word.len()>80){return s.reply(id,t,"Word must be 2–80 characters.",true).await;}
             let result={
                 let mut store=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;
@@ -50,7 +56,7 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
                 match action.as_str(){"add"=>{if !list.contains(&word){list.push(word.clone());}format!("Added {word} to the blocked-word list.")},"remove"=>{let n=list.len();list.retain(|x|x!=&word);format!("Removed {} entry.",n-list.len())},"list"=>format!("Blocked words: {}",if list.is_empty(){"None".into()}else{list.join(", ")}),_=>"Choose list, add, or remove.".into()}
             };
             s.persist()?;
-            s.reply(id,t,&result,true).await
+            s.edit_original(t,&result).await
         }
         "create-embed"=>{if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to create embeds.",true).await;}
             return s.callback(id,t,9,Some(modal("embed:create","Create an embed",vec![
@@ -60,7 +66,8 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to edit embeds.",true).await;}
             let name=opt_str(&opts,"name").unwrap_or_default();
             let Some(embed)=s.embed(&g,&name) else{return s.reply(id,t,"No saved embed with that name. Use /create-embed first.",true).await;};
-            return s.callback(id,t,4,Some(json!({"flags":64,"content":embed_editor_text(&embed),"embeds":[embed_payload(&embed)],"components":embed_editor_components(&embed)}))).await;}
+            s.defer(id,t).await?;
+            return s.edit_original_with_components(t,&embed_editor_text(&embed),embed_editor_components(&embed)).await;}
         "place-embed"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to place embeds.",true).await;}
             let name=opt_str(&opts,"name").unwrap_or_default();
@@ -86,8 +93,9 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
         }
         "ticket-settings"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to configure tickets.",true).await;}
+            s.defer(id,t).await?;
             let settings=s.ticket(&g);
-            s.callback(id,t,4,Some(json!({"content":ticket_text(&settings),"components":ticket_components(),"flags":64}))).await
+            s.edit_original_with_components(t,&ticket_text(&settings),ticket_components()).await
         }
         "moderation-settings"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to change moderation settings.",true).await;}
