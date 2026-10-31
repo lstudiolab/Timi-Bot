@@ -61,3 +61,12 @@ export function commandsForLibraries(installedLibraries = []) {
   return [...names].map(name => commandByName.get(name)?.toJSON()).filter(Boolean);
 }
 
+// Core commands are global. Guild registrations contain library commands only.
+export function libraryCommandsForLibraries(installedLibraries = []) {
+  const names = new Set();
+  for (const library of installedLibraries) {
+    for (const name of commandGroups[library] || []) names.add(name);
+  }
+  return [...names].map(name => commandByName.get(name)?.toJSON()).filter(Boolean);
+}
+
