@@ -45,7 +45,7 @@ const MAX_MESSAGE_BACKUP: usize = 25_000;
 include!("config.rs");
 include!("discord.rs");
 include!("commands.rs");
-include!("embeds.rs");\ninclude!("embeds.rs");
+include!("embeds.rs");
 include!("tickets.rs");
 include!("role_picker.rs");
 include!("moderation.rs");
