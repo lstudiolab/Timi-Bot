@@ -177,7 +177,7 @@ async fn open_ticket(s:&Arc<State>,t:&str,g:&str,u:&str)->Result<()>{
     let created=s.api(Method::POST,&format!("/guilds/{g}/channels"),Some(json!({"name":name.chars().take(100).collect::<String>(),"type":0,"parent_id":category,
         "topic":format!("timi-ticket-owner:{u}"),"permission_overwrites":overwrites,"reason":"Timi ticket opened by member"}))).await?;
     let id=created["id"].as_str().unwrap_or("");
-    let ticket_message=s.send(id,json!({"content":format!("<@{u}>"),"embeds":[{"color":0x5865F2,"title":x.panel_title,"description":x.ticket_message,"fields":[{"name":"Priority","value":"Normal","inline":true}]}],
+    let ticket_message=s.send(id,json!({"content":format!("<@{u}>"),"embeds":[{"color":0x808080,"title":x.panel_title,"description":x.ticket_message,"fields":[{"name":"Priority","value":"Normal","inline":true}]}],
         "components":[row(vec![button("ticket:close",&x.close_label,2),button("ticket:priority","Set priority",1)])],"allowed_mentions":{"users":[u]}})).await?;
     let ticket_message_id=ticket_message["id"].as_str().unwrap_or("");
     let thread_result=s.api(Method::POST,&format!("/channels/{id}/threads"),Some(json!({"name":format!("staff-{}",name.chars().take(90).collect::<String>()),"type":12,"auto_archive_duration":1440,"invitable":false}))).await;
