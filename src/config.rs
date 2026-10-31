@@ -371,6 +371,7 @@ impl State {
         if let Ok(mut acknowledged)=self.callback_acknowledged.lock(){acknowledged.remove(id);}
     }
     async fn callback(&self,id:&str,t:&str,kind:u8,data:Option<Value>)->Result<()> {
+        let started=std::time::Instant::now();
         { let mut attempts=self.callback_attempts.lock().map_err(|_|anyhow!("interaction callback lock poisoned"))?;
           if !attempts.insert(id.to_owned()){bail!("Duplicate initial response prevented for Discord interaction {id}.");} }
         let mut payload=json!({"type":kind});if let Some(d)=data{payload["data"]=d;}
@@ -387,6 +388,12 @@ impl State {
             bail!("Discord interaction acknowledgement returned {status}: {}",body.chars().take(600).collect::<String>());
         }
         if let Ok(mut acknowledged)=self.callback_acknowledged.lock(){acknowledged.insert(id.to_owned());}
+        let elapsed=started.elapsed();
+        if elapsed>=Duration::from_millis(750){
+            warn!("Discord interaction {id} acknowledgement took {} ms (callback type {kind}).",elapsed.as_millis());
+        }else{
+            tracing::debug!("Discord interaction {id} acknowledged in {} ms (callback type {kind}).",elapsed.as_millis());
+        }
         Ok(())
     }
     async fn reply(&self,id:&str,t:&str,text:&str,ephemeral:bool)->Result<()> {
@@ -406,12 +413,17 @@ impl State {
         // Interaction webhook endpoints authenticate with the interaction token
         // in the URL. Do not route these through api(), which adds Bot auth.
         let url=format!("{API}/webhooks/{}/{}/messages/@original",self.config.client_id,t);
-        let response=self.http.patch(url).json(&payload).send().await
+        let started=std::time::Instant::now();
+        let response=self.http.patch(url).timeout(Duration::from_secs(10)).json(&payload).send().await
             .context("Discord interaction response edit request failed")?;
         let status=response.status();
         let body=response.text().await.unwrap_or_default();
         if !status.is_success() && status!=StatusCode::NO_CONTENT {
             bail!("Discord interaction response edit returned {status}: {}",body.chars().take(600).collect::<String>());
+        }
+        let elapsed=started.elapsed();
+        if elapsed>=Duration::from_millis(1500){
+            warn!("Discord interaction response edit took {} ms.",elapsed.as_millis());
         }
         Ok(())
     }
