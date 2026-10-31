@@ -6,9 +6,8 @@ return {
   license = "MIT",
   private = true,
   dependencies = {
-    "luvit/require@2.2.2",
-    "luvit/fs@2.0.1",
-    "luvit/json@2.5.1",
+    -- Pin the complete Luvit runtime so its require/path/core modules stay in sync.
+    "luvit/luvit@2.18.1",
     "luvit/coro-http@3.2.4",
     "luvit/coro-websocket@3.1.1"
   },
