@@ -17,6 +17,10 @@ export function createModerationLibrary({client,store,logger,foundation}){
       if(id.startsWith("modpanel:"))return moderation.handle(i);
       if(id.startsWith("botguard:"))return foundation.handleInteraction(i);
     },
+    async messageDelete(message){await moderation.onMessageDelete(message);},
+    async messageUpdate(oldMessage,newMessage){await moderation.onMessageUpdate(oldMessage,newMessage);},
+    async memberUpdate(oldMember,newMember){await moderation.onMemberUpdate(oldMember,newMember);},
+    async ban(guild,user,removed=false){await moderation.onBan(guild,user,removed);},
     async messageCreate(message){
       recovery.backupMessage(message);
       await moderation.onMessage(message);
