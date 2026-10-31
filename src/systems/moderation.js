@@ -4,7 +4,61 @@ import { button,row,textInput,modal,respond,deny,requireManager } from "../ui.js
 
 const P=PermissionFlagsBits;
 export class Moderation {
-  constructor(client,store,logger){this.client=client;this.store=store;this.logger=logger;this.spam=new Map();this.warningRetention=30*86400000;}
+  constructor(client,store,logger){this.client=client;this.store=store;this.logger=logger;this.spam=new Map();this.warningRetention=30*86400000;this.processingJobs=new Set();this.jobTimer=null;}
+  async resumeJobs(guild){
+    const jobs=this.store.data.moderation_jobs[guild.id]||[];
+    for(const job of jobs)if(job.status!=="completed"&&job.status!=="cancelled")await this.processJob(guild,job);
+    this.scheduleJobs(guild);
+  }
+  scheduleJobs(guild,delay=30000){
+    if(this.jobTimer)clearTimeout(this.jobTimer);
+    this.jobTimer=setTimeout(()=>this.resumeJobs(guild).catch(error=>this.logger.error("Moderation job recovery failed:",error)),delay);
+    this.jobTimer.unref?.();
+  }
+  async processJob(guild,job){
+    if(this.processingJobs.has(job.id)||job.status==="completed"||job.status==="cancelled")return;
+    this.processingJobs.add(job.id);
+    try{
+      job.status="processing";job.updated_at=Date.now();this.store.save();
+      if(!job.steps.deleted){
+        const channel=await guild.channels.fetch(job.channel_id).catch(()=>null);
+        if(channel?.isTextBased()){
+          const ids=(job.message_ids||[]).filter(Boolean);
+          if(ids.length>1)await channel.bulkDelete(ids,true).catch(async()=>{for(const id of ids){const message=await channel.messages.fetch(id).catch(()=>null);if(message)await message.delete().catch(()=>{});}});
+          else if(ids[0]){const message=await channel.messages.fetch(ids[0]).catch(()=>null);if(message)await message.delete().catch(()=>{});}
+        }
+        job.steps.deleted=true;job.updated_at=Date.now();this.store.save();
+      }
+      if(!job.steps.sanction){
+        const member=await guild.members.fetch(job.user_id).catch(()=>null);
+        if(member){
+          if(job.action==="timeout")await member.timeout(job.timeout_minutes*60000,job.reason);
+          else if(job.action==="kick")await member.kick(job.reason);
+          else if(job.action==="ban")await guild.members.ban(job.user_id,{deleteMessageSeconds:Math.min(60,job.action_duration_seconds),reason:job.reason});
+        }
+        job.steps.sanction=true;job.updated_at=Date.now();this.store.save();
+      }
+      if(!job.steps.logged){
+        await this.log(guild,`Anti-spam action: ${job.action_result}. Automatic warning #${job.warning_id} issued to <@${job.user_id}>. Channel: <#${job.channel_id}>. Reason: ${job.reason}.`);
+        job.steps.logged=true;job.updated_at=Date.now();this.store.save();
+      }
+      job.status="completed";job.completed_at=Date.now();job.updated_at=Date.now();
+      const jobs=this.store.data.moderation_jobs[guild.id]||[];
+      const completed=jobs.filter(v=>v.status==="completed").sort((a,b)=>(b.completed_at||0)-(a.completed_at||0));
+      const keep=new Set(completed.slice(0,200).map(v=>v.id));
+      this.store.data.moderation_jobs[guild.id]=jobs.filter(v=>v.status!=="completed"||keep.has(v.id));
+      this.store.save();
+    }catch(error){
+      job.status="pending";job.attempts=(job.attempts||0)+1;job.last_error=String(error?.message||error).slice(0,500);job.updated_at=Date.now();
+      this.store.save();this.logger.error(`Moderation job ${job.id} failed; it will be retried:`,error);
+      this.scheduleJobs(guild,Math.min(300000,10000*2**Math.min(job.attempts,5)));
+    }finally{this.processingJobs.delete(job.id);}
+  }
+  async enqueueJob(guild,job){
+    this.store.data.moderation_jobs[guild.id]||=[];
+    this.store.data.moderation_jobs[guild.id].push(job);this.store.save();
+    await this.processJob(guild,job);
+  }
   text(x){return ["**Timi Moderation Settings**","",`**Module:** ${x.enabled?"Active":"Inactive"}`,`**Sanction:** ${x.sanction}`,
     `**Timeout duration:** ${x.timeout_minutes} minute(s)`,`**Log channel:** ${mentionChannel(x.log_channel_id)}`,
     `**Action duration:** ${x.action_duration_seconds} second(s)`,`**Maximum messages:** ${x.max_message_count}`,
@@ -126,16 +180,16 @@ export class Moderation {
     this.spam.delete(key);
     const record=this.store.member(guild.id,message.author.id);record.suspicious++;record.last_suspicious=Date.now();record.last_reason=reason;
     const warning=await this.warn(guild.id,message.author.id,reason);
-    const ids=window.map(v=>v.id);
-    if(ids.length>=2&&ids.length<=100)await message.channel.bulkDelete(ids,true).catch(()=>message.delete().catch(()=>{}));
-    else await message.delete().catch(()=>{});
-    let action="messages deleted";
-    try{
-      if(x.sanction==="timeout"){await member.timeout(x.timeout_minutes*60000,reason);action=`timed out for ${x.timeout_minutes} minute(s)`;}
-      else if(x.sanction==="kick"){await member.kick(reason);action="kicked";}
-      else if(x.sanction==="ban"){await guild.members.ban(message.author.id,{deleteMessageSeconds:Math.min(60,x.action_duration_seconds),reason});action="banned";}
-    }catch(error){this.logger.warn("Automod sanction failed:",error.message);}
-    await this.log(guild,`Anti-spam action: ${action}. Automatic warning #${warning} issued to <@${message.author.id}>. Channel: <#${message.channelId}>. Reason: ${reason}.`);
+    let actionResult="messages deleted";
+    if(x.sanction==="timeout")actionResult=`timed out for ${x.timeout_minutes} minute(s)`;
+    else if(x.sanction==="kick")actionResult="kicked";
+    else if(x.sanction==="ban")actionResult="banned";
+    const job={id:`automod:${guild.id}:${message.id}`,type:"automod-sanction",status:"pending",
+      guild_id:guild.id,user_id:message.author.id,channel_id:message.channelId,message_ids:window.map(v=>v.id),
+      reason,warning_id:warning,action:x.sanction,action_result:actionResult,timeout_minutes:x.timeout_minutes,
+      action_duration_seconds:x.action_duration_seconds,steps:{deleted:false,sanction:false,logged:false},
+      attempts:0,created_at:Date.now(),updated_at:Date.now()};
+    await this.enqueueJob(guild,job);
   }
   async onMessageDelete(message){
     if(message.partial)message=await message.fetch().catch(()=>null);
