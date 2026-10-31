@@ -402,11 +402,24 @@ impl State {
         self.callback(id,t,4,Some(json!({"content":text,"flags":if ephemeral{64}else{0}}))).await
     }
     async fn defer(&self,id:&str,t:&str)->Result<()> {self.callback(id,t,5,Some(json!({"flags":64}))).await}
+    async fn edit_interaction_webhook(&self,t:&str,payload:Value)->Result<()> {
+        // Interaction webhook endpoints authenticate with the interaction token
+        // in the URL. Do not route these through api(), which adds Bot auth.
+        let url=format!("{API}/webhooks/{}/{}/messages/@original",self.config.client_id,t);
+        let response=self.http.patch(url).json(&payload).send().await
+            .context("Discord interaction response edit request failed")?;
+        let status=response.status();
+        let body=response.text().await.unwrap_or_default();
+        if !status.is_success() && status!=StatusCode::NO_CONTENT {
+            bail!("Discord interaction response edit returned {status}: {}",body.chars().take(600).collect::<String>());
+        }
+        Ok(())
+    }
     async fn edit_original(&self,t:&str,text:&str)->Result<()> {
-        self.api(Method::PATCH,&format!("/webhooks/{}/{}/messages/@original",self.config.client_id,t),Some(json!({"content":text}))).await?;Ok(())
+        self.edit_interaction_webhook(t,json!({"content":text})).await
     }
     async fn edit_original_with_components(&self,t:&str,text:&str,components:Vec<Value>)->Result<()> {
-        self.api(Method::PATCH,&format!("/webhooks/{}/{}/messages/@original",self.config.client_id,t),Some(json!({"content":text,"components":components}))).await?;Ok(())
+        self.edit_interaction_webhook(t,json!({"content":text,"components":components})).await
     }
     async fn send(&self,c:&str,p:Value)->Result<Value>{self.api(Method::POST,&format!("/channels/{c}/messages"),Some(p)).await}
     async fn edit(&self,c:&str,m:&str,p:Value)->Result<Value>{self.api(Method::PATCH,&format!("/channels/{c}/messages/{m}"),Some(p)).await}
