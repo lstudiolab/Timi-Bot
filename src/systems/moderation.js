@@ -8,11 +8,14 @@ export class Moderation {
   async resumeJobs(guild){
     const jobs=this.store.data.moderation_jobs[guild.id]||[];
     for(const job of jobs)if(job.status!=="completed"&&job.status!=="cancelled")await this.processJob(guild,job);
-    this.scheduleJobs(guild);
+    if((this.store.data.moderation_jobs[guild.id]||[]).some(job=>job.status!=="completed"&&job.status!=="cancelled")&&!this.jobTimers.has(guild.id))this.scheduleJobs(guild);
   }
   scheduleJobs(guild,delay=30000){
     const existing=this.jobTimers.get(guild.id);if(existing)clearTimeout(existing);
-    const timer=setTimeout(()=>this.resumeJobs(guild).catch(error=>this.logger.error("Moderation job recovery failed:",error)),delay);
+    const timer=setTimeout(()=>{
+      this.jobTimers.delete(guild.id);
+      this.resumeJobs(guild).catch(error=>this.logger.error("Moderation job recovery failed:",error));
+    },delay);
     timer.unref?.();this.jobTimers.set(guild.id,timer);
   }
   async processJob(guild,job){
@@ -39,7 +42,10 @@ export class Moderation {
         job.steps.sanction=true;job.updated_at=Date.now();this.store.save();
       }
       if(!job.steps.logged){
-        await this.log(guild,`Anti-spam action: ${job.action_result}. Automatic warning #${job.warning_id} issued to <@${job.user_id}>. Channel: <#${job.channel_id}>. Reason: ${job.reason}.`);
+        const x=this.store.mods(guild.id);
+        let channel=x.log_channel_id?await guild.channels.fetch(x.log_channel_id).catch(()=>null):null;
+        if(!channel)channel=guild.channels.cache.find(c=>c.name==="timi"&&c.type===ChannelType.GuildText);
+        if(channel?.isTextBased())await channel.send({content:`Anti-spam action: ${job.action_result}. Automatic warning #${job.warning_id} issued to <@${job.user_id}>. Channel: <#${job.channel_id}>. Reason: ${job.reason}.`,allowedMentions:{parse:[]}});
         job.steps.logged=true;job.updated_at=Date.now();this.store.save();
       }
       job.status="completed";job.completed_at=Date.now();job.updated_at=Date.now();
