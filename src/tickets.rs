@@ -97,7 +97,32 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
         s.api(Method::PATCH,&format!("/channels/{c}/messages/{message_id}"),Some(json!({"embeds":message["embeds"]}))).await?;
         return s.edit_original(t,&format!("Ticket priority set to **{label}**.")).await;
     }
-    if custom=="ticket:open"{s.defer(id,t).await?;return open_ticket(s,t,&g,&u).await;}
+    if custom=="ticket:open"{
+        // Ticket provisioning can involve several Discord API calls. Run it
+        // outside the gateway event handler after the interaction is deferred,
+        // so slow channel/thread setup cannot stall other button acknowledgements.
+        let state=Arc::clone(s);
+        let guild=g.clone();
+        let user=u.clone();
+        let token=t.to_owned();
+        tokio::spawn(async move{
+            if let Err(error)=open_ticket(&state,&token,&guild,&user).await{
+                error!("Ticket opening failed for guild {guild}, user {user}: {error:#}");
+                let detail=format!("{error:#}");
+                let message=if detail.contains("50013") {
+                    "Timi cannot open this ticket because it is missing a required channel or role permission. Check Manage Channels, View Channel, and Send Messages permissions."
+                } else if detail.contains("10003") || detail.contains("Unknown Channel") {
+                    "Discord could not find a channel needed to finish creating this ticket. Check the server's ticket category and channel permissions, then try again."
+                } else {
+                    "Timi could not finish creating your ticket. Check the bot's server permissions and try again."
+                };
+                if let Err(edit_error)=state.edit_original(&token,message).await{
+                    error!("Could not report ticket-opening failure to interaction: {edit_error:#}");
+                }
+            }
+        });
+        return Ok(());
+    }
     if custom=="ticket:close"||custom=="ticket:confirm-close"||custom=="ticket:cancel-close"{
         let message_id=v.pointer("/message/id").and_then(Value::as_str).unwrap_or("");
         if !snowflake(message_id){
@@ -241,9 +266,20 @@ async fn open_ticket(s:&Arc<State>,t:&str,g:&str,u:&str)->Result<()>{
     overwrites.push(json!({"id":bot,"type":1,"allow":(VIEW|SEND|HISTORY|MANAGE_CHANNELS|MANAGE_MESSAGES|MANAGE_THREADS|CREATE_PRIVATE_THREADS|SEND_MESSAGES_IN_THREADS|EMBED).to_string(),"deny":"0"}));
     let created=s.api(Method::POST,&format!("/guilds/{g}/channels"),Some(json!({"name":name.chars().take(100).collect::<String>(),"type":0,"parent_id":category,
         "topic":format!("timi-ticket-owner:{u}"),"permission_overwrites":overwrites,"reason":"Timi ticket opened by member"}))).await?;
-    let id=created["id"].as_str().unwrap_or("");
-    let ticket_message=s.send(id,json!({"content":format!("<@{u}>"),"embeds":[{"color":0x808080,"title":x.panel_title,"description":x.ticket_message,"fields":[{"name":"Priority","value":"Normal","inline":true}]}],
-        "components":[row(vec![button("ticket:close",&x.close_label,2),button("ticket:priority","Set priority",1)])],"allowed_mentions":{"users":[u]}})).await?;
+    let id=created["id"].as_str().filter(|id|snowflake(id))
+        .ok_or_else(||anyhow!("Discord created a ticket channel but did not return a valid channel ID"))?;
+    let ticket_message=match s.send(id,json!({"content":format!("<@{u}>"),"embeds":[{"color":0x808080,"title":x.panel_title,"description":x.ticket_message,"fields":[{"name":"Priority","value":"Normal","inline":true}]}],
+        "components":[row(vec![button("ticket:close",&x.close_label,2),button("ticket:priority","Set priority",1)])],"allowed_mentions":{"users":[u]}})).await{
+        Ok(message)=>message,
+        Err(error)=>{
+            // Do not leave an empty, inaccessible ticket channel if its first
+            // message cannot be posted. A channel already removed is harmless.
+            if let Err(cleanup)=s.api(Method::DELETE,&format!("/channels/{id}"),None).await{
+                warn!("Could not clean up incomplete ticket channel {id}: {cleanup:#}");
+            }
+            return Err(error).context("Could not post the initial ticket message");
+        }
+    };
     let ticket_message_id=ticket_message["id"].as_str().unwrap_or("");
     let thread_result=s.api(Method::POST,&format!("/channels/{id}/threads"),Some(json!({"name":format!("staff-{}",name.chars().take(90).collect::<String>()),"type":12,"auto_archive_duration":1440,"invitable":false}))).await;
     let thread_note=match thread_result{
