@@ -1,10 +1,5 @@
-/.env
-/.env.*
-!/.env.example
-/data/*.json
-/data/*.tmp
-/data/*.bak
-/data/*.corrupt-*
-/deps/
-/lit_modules/
-/.DS_Store
+node_modules/
+.env
+data/
+*.log
+.DS_Store

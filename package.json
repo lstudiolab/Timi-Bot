@@ -1,0 +1,17 @@
+{
+  "name": "timi-bot",
+  "version": "4.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Timi Discord bot powered by Node.js and discord.js",
+  "engines": { "node": ">=24.17.0" },
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy": "node src/deploy-commands.js",
+    "check": "node scripts/check.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "discord.js": "^14.27.0"
+  }
+}
