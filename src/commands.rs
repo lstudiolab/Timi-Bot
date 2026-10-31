@@ -2,9 +2,10 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
     let name=v.pointer("/data/name").and_then(Value::as_str).unwrap_or("");
     let g=guild_id(&v);let c=channel_id(&v);let u=user_id(&v);
     let opts=v.pointer("/data/options").cloned().unwrap_or(json!([]));
-    // Discord only shows its native thinking state when a command is deferred.
-    // Modal-opening commands must remain an immediate type-9 response.
-    if name!="create-embed"{s.defer(id,t).await?;}
+    // Discord requires modal-opening commands to respond immediately.
+    // All other commands, including denied create-embed attempts, use the
+    // shared five-second deferred response.
+    if name!="create-embed"||!manage_guild(&v){s.defer(id,t).await?;}
     if g.is_empty(){return s.reply(id,t,"This command can only be used in a server.",true).await;}
     match name{
         "create-embed"=>{if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to create embeds.",true).await;}

@@ -12,24 +12,22 @@ async fn mod_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Resul
                 vec![input("value",if d{"Action duration in seconds"}else{"Maximum message count"},if d{x.action_duration_seconds.to_string()}else{x.max_message_count.to_string()}.as_str(),false,3)]))).await;
         }
         "modpanel:log"=>{
-            return s.callback(id,t,4,Some(json!({"content":"Select the channel where moderation logs should be sent.",
-                "components":[row(vec![json!({"type":8,"custom_id":"modpanel:log-select","placeholder":"Select a log channel","channel_types":[0],"min_values":1,"max_values":1})])],
-                "flags":64}))).await;
+            return s.edit_original_with_components(t,
+                "Select the channel where moderation logs should be sent.",
+                vec![row(vec![json!({"type":8,"custom_id":"modpanel:log-select","placeholder":"Select a log channel","channel_types":[0],"min_values":1,"max_values":1})])]
+            ).await;
         }
         "modpanel:enable"|"modpanel:disable"|"modpanel:log-select"|"modpanel:invites"|"modpanel:mentions"|"modpanel:caps"=>{},
-        _=>return Ok(())
+        _=>return s.edit_original(t,"This moderation control is no longer available.").await
     }
     // Update the settings message directly for the enable/disable toggle.
     // This avoids deferring an update and then separately editing the webhook
     // response, which can fail and leave the panel showing a generic error.
     if custom=="modpanel:enable"||custom=="modpanel:disable"{
         next.enabled=custom=="modpanel:enable";
-        // Acknowledge the component immediately with DEFERRED_UPDATE_MESSAGE.
-        // Persist and render the updated panel only after Discord has accepted
-        // the acknowledgement, avoiding a slow initial update callback.
-        s.callback(id,t,6,None).await?;
         s.queue_mods(&g,next.clone())?;
-        return s.edit_original_with_components(t,&mod_text(&next),mod_components(&next)).await;
+        refresh_mod_panel(s,&next).await;
+        return s.edit_original(t,"Moderation settings updated.").await;
     }
     // Show the native thinking indicator before saving or making REST calls.
     s.defer(id,t).await?;

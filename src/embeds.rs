@@ -43,7 +43,7 @@ async fn embed_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Res
         _=>None
     };
     if let Some(m)=modal_data{return s.callback(id,t,9,Some(m)).await;}
-    Ok(())
+    s.edit_original(t,"This embed control is no longer available.").await
 }
 async fn embed_modal_submit(s:&Arc<State>,t:&str,v:&Value,custom:&str,fields:&HashMap<String,String>)->Result<()>{
     let g=guild_id(v);let u=user_id(v);
@@ -81,7 +81,7 @@ async fn embed_modal_submit(s:&Arc<State>,t:&str,v:&Value,custom:&str,fields:&Ha
             let index=fields.get("field-index").and_then(|v|v.parse::<usize>().ok()).unwrap_or(0);
             if index==0||index>e.fields.len(){return s.edit_original(t,"Enter a valid field number shown in the embed editor.").await;}e.fields.remove(index-1);
         }
-        _=>return Ok(())
+        _=>return s.edit_original(t,"This embed form is no longer available.").await
     }
     s.save_embed(e.clone())?;refresh_saved_embed(s,&e).await;
     s.edit_original_with_components(t,&embed_editor_text(&e),embed_editor_components(&e)).await

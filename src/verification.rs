@@ -22,11 +22,8 @@ fn score(s:&State,g:&str,u:&str,user:&Value,settings:&VerifySettings)->(u32,Valu
 fn has_verified(record:&MemberRecord)->bool{record.last_verified>0}
 
 async fn verify_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Result<()>{
-    if custom!="verify:start"{return Ok(());}
+    if custom!="verify:start"{return s.edit_original(t,"This verification control is no longer available.").await;}
     let g=guild_id(v);let u=user_id(v);s.defer(id,t).await?;
-    // Keep the native Discord thinking indicator visible for a meaningful minimum
-    // duration, even when the member checks complete unusually quickly.
-    let thinking_started=std::time::Instant::now();
     let settings=s.verify(&g);
     // A successful verification is permanent for this member in this server, even if the role is later removed.
     if has_verified(&s.member(&g,&u)){
@@ -36,12 +33,9 @@ async fn verify_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
     let roles=m["roles"].as_array().cloned().unwrap_or_default();
     if !settings.role_id.is_empty()&&roles.iter().any(|r|r.as_str()==Some(&settings.role_id)){return s.edit_original(t,"You are already verified.").await;}
     if !settings.required_role_id.is_empty()&&!roles.iter().any(|r|r.as_str()==Some(&settings.required_role_id)){return s.edit_original(t,"You cannot start verification yet. You must first have the configured required role.").await;}
-    // Keep Discord native thinking visible until the risk check and verification action finish.
     let user=m.get("user").cloned().unwrap_or_else(||json!({"id":u}));
     let (points,checks,age_failed)=score(s,&g,&u,&user,&settings);
     let result=verification_decision(points,age_failed,&settings.thresholds);
-    let thinking_elapsed=thinking_started.elapsed();
-    if thinking_elapsed<std::time::Duration::from_secs(4){tokio::time::sleep(std::time::Duration::from_secs(4)-thinking_elapsed).await;}
     let lines=checks.as_array().unwrap().iter().map(|x|format!("**{}:** {}/{} — {}",x["name"],x["points"],x["max"],x["reason"])).collect::<Vec<_>>().join("\n");
     let mut log=settings.review_channel_id.clone();if log.is_empty(){log=find_channel(s,&g,"timi").await.unwrap_or_default();}
     match result{
@@ -66,7 +60,7 @@ async fn verify_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
     Ok(())
 }
 async fn bot_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Result<()>{
-    let bits:Vec<&str>=custom.split(':').collect();if bits.len()!=4{return Ok(());}
+    let bits:Vec<&str>=custom.split(':').collect();if bits.len()!=4{return s.edit_original(t,"This bot approval control is invalid.").await;}
     s.defer(id,t).await?;
     let (decision,g,bot)=(bits[1],bits[2],bits[3]);let user=user_id(v);
     let guild=s.api(Method::GET,&format!("/guilds/{g}"),None).await?;

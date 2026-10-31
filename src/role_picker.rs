@@ -86,10 +86,10 @@ async fn role_picker_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str
         s.save_role_picker_menu(menu)?;
         return s.edit_original(t,if selected.is_empty(){"Your role selections have been cleared."}else{"Your role selections have been updated."}).await;
     }
-    Ok(())
+    s.edit_original(t,"This role picker control is no longer available.").await
 }
 async fn role_picker_modal_submit(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str,fields:&HashMap<String,String>)->Result<()>{
-    if custom!="rolepicker:details"{return Ok(());}
+    if custom!="rolepicker:details"{return s.edit_original(t,"This role picker form is no longer available.").await;}
     let g=guild_id(v);let u=user_id(v);let channel=channel_id(v);
     let server=s.api(Method::GET,&format!("/guilds/{g}"),None).await?;
     if server["owner_id"].as_str()!=Some(&u){return s.edit_original(t,"Only the server owner can configure role picker menus.").await;}

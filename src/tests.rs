@@ -52,4 +52,18 @@ mod tests {
         assert!(settings.panel_message_id.is_empty());
     }
 
+    
+    #[test]
+    fn component_modal_openers_are_not_deferred() {
+        assert!(component_opens_modal("rolepicker:start", false, false));
+        assert!(component_opens_modal("ticket:wizard-start", true, false));
+        assert!(component_opens_modal("ticket:edit-ticket", true, false));
+        assert!(!component_opens_modal("ticket:wizard-start", false, false));
+        assert!(component_opens_modal("modpanel:sanction", true, false));
+        assert!(!component_opens_modal("modpanel:log", true, false));
+        assert!(component_opens_modal("embed:content:welcome", true, true));
+        assert!(!component_opens_modal("embed:content:welcome", false, true));
+        assert!(!component_opens_modal("embed:unknown:welcome", true, true));
+    }
+
 }

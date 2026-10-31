@@ -409,8 +409,17 @@ impl State {
         }
         self.callback(id,t,4,Some(json!({"content":text,"flags":if ephemeral{64}else{0}}))).await
     }
-    async fn defer(&self,id:&str,t:&str)->Result<()> {self.callback(id,t,5,Some(json!({"flags":64}))).await}
-    async fn defer_update(&self,id:&str,t:&str)->Result<()> {self.callback(id,t,6,None).await}
+    async fn defer(&self,id:&str,t:&str)->Result<()> {
+        let already_acknowledged=self.callback_acknowledged.lock()
+            .map_err(|_|anyhow!("interaction acknowledgement lock poisoned"))?
+            .contains(id);
+        if already_acknowledged{return Ok(());}
+        self.callback(id,t,5,Some(json!({"flags":64}))).await?;
+        // Acknowledge before waiting: Discord's initial-response deadline is
+        // three seconds, while a deferred response can remain open.
+        sleep(Duration::from_secs(5)).await;
+        Ok(())
+    }
     async fn edit_interaction_webhook(&self,t:&str,payload:Value)->Result<()> {
         // Interaction webhook endpoints authenticate with the interaction token
         // in the URL. Do not route these through api(), which adds Bot auth.
