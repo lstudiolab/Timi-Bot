@@ -36,10 +36,24 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
         let staff=!settings.support_role_id.is_empty()&&roles.iter().any(|r|r.as_str()==Some(settings.support_role_id.as_str()));
         if !staff&&!manager{return s.reply(id,t,"Only support staff can change ticket priority.",true).await;}
         let priority=v.pointer("/data/values/0").and_then(Value::as_str).unwrap_or("");
-        let (label,color)=match priority{"low"=>("Low",0x57F287),"normal"=>("Normal",0x5865F2),"high"=>("High",0xFEE75C),"urgent"=>("Urgent",0xED4245),_=>return s.reply(id,t,"Choose a valid priority level.",true).await};
+        let (label,color,indicator)=match priority{
+            "low"=>("Low",0x57F287,"🟢"),
+            "normal"=>("Normal",0xFEE75C,"🟡"),
+            "high"=>("High",0xED4245,"🔴"),
+            "urgent"=>("Urgent",0xED4245,"🔴"),
+            _=>return s.reply(id,t,"Choose a valid priority level.",true).await
+        };
         let message_id=custom.strip_prefix("ticket:priority-select:").unwrap_or("");
         if !snowflake(message_id){return s.reply(id,t,"This ticket priority control is invalid.",true).await;}
         s.defer(id,t).await?;
+        let channel=s.api(Method::GET,&format!("/channels/{c}"),None).await?;
+        let current_name=channel["name"].as_str().unwrap_or("ticket");
+        let base_name=current_name.strip_prefix("🟢-")
+            .or_else(||current_name.strip_prefix("🟡-"))
+            .or_else(||current_name.strip_prefix("🔴-"))
+            .unwrap_or(current_name);
+        let channel_name=format!("{indicator}-{}",base_name).chars().take(100).collect::<String>();
+        s.api(Method::PATCH,&format!("/channels/{c}"),Some(json!({"name":channel_name}))).await?;
         let mut message=s.api(Method::GET,&format!("/channels/{c}/messages/{message_id}"),None).await?;
         let embed=message.pointer_mut("/embeds/0").ok_or_else(||anyhow!("Ticket embed is missing"))?;
         embed["color"]=json!(color);
