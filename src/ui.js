@@ -5,7 +5,8 @@ const workAnimations=new WeakMap();
 const workLabels=["Working","Generate","Thinking"];
 const workDots=["…",".","..","…"];
 export const greyEmbed=(title,description)=>new EmbedBuilder().setColor(GREY).setTitle(title).setDescription(description);
-export const button=(id,label,style=ButtonStyle.Secondary)=>new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style);
+// Keep all Timi buttons visually quiet and consistent (Discord Secondary style).
+export const button=(id,label,_style=ButtonStyle.Secondary)=>new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(ButtonStyle.Secondary);
 export const row=(...components)=>new ActionRowBuilder().addComponents(...components);
 export function textInput(id,label,value="",style=TextInputStyle.Short,required=true,maxLength=1000){
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required)
