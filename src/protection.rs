@@ -29,7 +29,7 @@ async fn bot_join(s:&Arc<State>,g:&str,bot:&str,name:&str)->Result<()>{
         if cid==log||n=="timi-logs"||n=="timi-confirmations"{continue;}
         let _=s.api(Method::PUT,&format!("/channels/{cid}/permissions/{bot}"),Some(json!({"type":1,"allow":"0","deny":(VIEW|SEND|HISTORY|(1<<20)|(1<<21)).to_string()}))).await;
     }}
-    let msg=s.send(&log,json!({"embeds":[{"color":8421504,"title":"Bot approval required","description":format!("Do you agree on giving this bot permission to serve this server?\n\nBot: <@{bot}> ({name})\nAccess: This bot is temporarily restricted while approval is pending.")}],
+    let msg=s.send(&log,json!({"embeds":[{"color":0x808080,"title":"Bot approval required","description":format!("Do you agree on giving this bot permission to serve this server?\n\nBot: <@{bot}> ({name})\nAccess: This bot is temporarily restricted while approval is pending.")}],
         "components":[row(vec![button(&format!("botguard:yes:{g}:{bot}"),"Yes",3),button(&format!("botguard:no:{g}:{bot}"),"No",4)])]})).await?;
     if let Some(mid)=msg["id"].as_str(){s.runtime.lock().map_err(|_|anyhow!("runtime lock poisoned"))?.pending_bots.insert(format!("{g}:{bot}"),mid.into());}
     Ok(())
