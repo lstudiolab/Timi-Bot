@@ -1,4 +1,4 @@
-local util = require("timi.util")
+local util = require("../timi/util")
 
 local Interactions = {}
 Interactions.__index = Interactions
