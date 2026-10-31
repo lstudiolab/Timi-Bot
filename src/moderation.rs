@@ -51,6 +51,22 @@ async fn mod_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Resul
     s.edit_original_with_components(t,&mod_text(&next),mod_components(&next)).await
 }
 
+const WARNING_RETENTION_MS:i64=30*DAY;
+
+fn record_automatic_warning(s:&State,g:&str,u:&str,reason:&str)->Result<u64>{
+    let timestamp=now();
+    let case_id={
+        let mut store=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;
+        let cases=store.moderation_cases.entry(g.to_owned()).or_default();
+        cases.retain(|case|case["type"]!="warning"||timestamp-case["created_at"].as_i64().unwrap_or(timestamp)<=WARNING_RETENTION_MS);
+        let id=cases.iter().filter_map(|case|case["id"].as_u64()).max().unwrap_or(0)+1;
+        cases.push(json!({"id":id,"type":"warning","user_id":u,"moderator_id":"timi","reason":reason,"created_at":timestamp,"automatic":true}));
+        id
+    };
+    s.persist()?;
+    Ok(case_id)
+}
+
 async fn moderate(s:&Arc<State>,msg:&Message)->Result<()>{
     let Some(gid)=msg.guild_id else{return Ok(());};let g=gid.get().to_string();let u=msg.author.id.get().to_string();
     if msg.author.bot||is_guild_owner(s,&g,&u).await{return Ok(());}let settings=s.mods(&g);if !settings.enabled{return Ok(());}
@@ -61,7 +77,8 @@ async fn moderate(s:&Arc<State>,msg:&Message)->Result<()>{
         let reason=format!("blocked word or phrase: {word}");
         let _=s.api(Method::DELETE,&format!("/channels/{}/messages/{}",msg.channel_id.get(),msg.id.get()),None).await;
         s.update_member(&g,&u,|r|{r.suspicious+=1;r.last_suspicious=now();r.last_reason=reason.clone();})?;
-        log_to(s,&g,&settings.log_channel_id,&format!("AutoMod removed a message from <@{u}> in <#{}>. Reason: {reason}.",msg.channel_id.get())).await;
+        let warning=record_automatic_warning(s,&g,&u,&reason)?;
+        log_to(s,&g,&settings.log_channel_id,&format!("AutoMod removed a message from <@{u}> in <#{}>. Automatic warning #{warning}. Reason: {reason}.",msg.channel_id.get())).await;
         return Ok(());
     }
     let mentions=msg.mentions.len()+msg.mention_roles.len();
@@ -87,6 +104,7 @@ async fn moderate(s:&Arc<State>,msg:&Message)->Result<()>{
     }
     if reason.is_empty(){return Ok(());}
     s.update_member(&g,&u,|r|{r.suspicious+=1;r.last_suspicious=timestamp;r.last_reason=reason.clone();})?;
+    let warning=record_automatic_warning(s,&g,&u,&reason)?;
     if !ids.is_empty(){let _=s.api(Method::POST,&format!("/channels/{}/messages/bulk-delete",msg.channel_id.get()),Some(json!({"messages":ids.into_iter().take(100).collect::<Vec<_>>()}))).await;}
     let mut action="messages deleted".to_owned();
     match settings.sanction.as_str(){
@@ -96,6 +114,6 @@ async fn moderate(s:&Arc<State>,msg:&Message)->Result<()>{
         "ban"=>{if s.api(Method::PUT,&format!("/guilds/{g}/bans/{u}?reason=Anti-spam"),Some(json!({"delete_message_seconds":settings.action_duration_seconds.min(60)}))).await.is_ok(){action="banned".into();}}
         _=>{}
     }
-    log_to(s,&g,&settings.log_channel_id,&format!("Anti-spam action: {action}. Member: <@{u}>. Channel: <#{}>. Reason: {reason}.",msg.channel_id.get())).await;
+    log_to(s,&g,&settings.log_channel_id,&format!("Anti-spam action: {action}. Automatic warning #{warning} issued to <@{u}>. Channel: <#{}>. Reason: {reason}.",msg.channel_id.get())).await;
     Ok(())
 }
