@@ -8,6 +8,7 @@ export function createModerationLibrary({client,store,logger,foundation}){
   const recovery=new Recovery(client,store,logger);
   return {
     async ready(guild){
+      await moderation.resumeJobs(guild);
       await protection.ready(guild);
       for(const channel of guild.channels.cache.values())recovery.snapshot(channel);
     },
