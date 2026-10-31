@@ -1,11 +1,16 @@
-async fn report_interaction_error(s:&State,_id:&str,token:&str,error:anyhow::Error){
-    error!("Interaction failed: {error:#}");
-    let message="Timi could not complete that action. Check the bot's permissions, role hierarchy, and logs.";
-    // Never send a second initial callback after an interaction may already have
-    // been acknowledged. That creates a misleading Unknown interaction (10062).
-    if let Err(edit_error)=s.edit_original(token,message).await{
-        warn!("Could not display interaction error after acknowledgement: {edit_error:#}");
+async fn report_interaction_error(s:&State,id:&str,token:&str,error:anyhow::Error){
+    error!("Interaction {id} failed: {error:#}");
+    // The callback result may be ambiguous if Discord accepted it but the
+    // HTTP response was lost. Never issue another response or edit the source.
+    if s.take_callback_attempt(id) {
+        warn!("Skipping a second interaction response for {id}; an initial callback was already attempted.");
+        return;
     }
+    let message="Timi could not complete that action. Check the bot's permissions, role hierarchy, and logs.";
+    if let Err(reply_error)=s.reply(id,token,message,true).await {
+        warn!("Could not send the interaction error response for {id}: {reply_error:#}");
+    }
+    s.clear_callback_attempt(id);
 }
 
 struct Handler{state:Arc<State>}
@@ -50,22 +55,25 @@ impl EventHandler for Handler{
             Interaction::Command(v)=>{
                 let id=v.id.get().to_string();let token=v.token.clone();
                 let value=serde_json::to_value(&v).unwrap_or(Value::Null);
-                if let Err(e)=command(&self.state,&id,&token,value).await{
-                    report_interaction_error(&self.state,&id,&token,e).await;
+                match command(&self.state,&id,&token,value).await {
+                    Ok(())=>self.state.clear_callback_attempt(&id),
+                    Err(e)=>report_interaction_error(&self.state,&id,&token,e).await,
                 }
             }
             Interaction::Component(v)=>{
                 let id=v.id.get().to_string();let token=v.token.clone();
                 let value=serde_json::to_value(&v).unwrap_or(Value::Null);
-                if let Err(e)=component(&self.state,&id,&token,value).await{
-                    report_interaction_error(&self.state,&id,&token,e).await;
+                match component(&self.state,&id,&token,value).await {
+                    Ok(())=>self.state.clear_callback_attempt(&id),
+                    Err(e)=>report_interaction_error(&self.state,&id,&token,e).await,
                 }
             }
             Interaction::Modal(v)=>{
                 let id=v.id.get().to_string();let token=v.token.clone();
                 let value=serde_json::to_value(&v).unwrap_or(Value::Null);
-                if let Err(e)=modal_submit(&self.state,&id,&token,value).await{
-                    report_interaction_error(&self.state,&id,&token,e).await;
+                match modal_submit(&self.state,&id,&token,value).await {
+                    Ok(())=>self.state.clear_callback_attempt(&id),
+                    Err(e)=>report_interaction_error(&self.state,&id,&token,e).await,
                 }
             }
             _=>{}

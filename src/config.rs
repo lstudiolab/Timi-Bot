@@ -219,7 +219,7 @@ struct Runtime {
     persist_pending:bool,
 }
 struct State {
-    config:Config, http:HttpClient, store:Mutex<Store>, runtime:Mutex<Runtime>,
+    config:Config, http:HttpClient, store:Mutex<Store>, runtime:Mutex<Runtime>, callback_attempts:Mutex<HashSet<String>>,
 }
 impl State {
     fn new(config:Config)->Result<Arc<Self>> {
@@ -233,7 +233,7 @@ impl State {
             info!("Imported legacy Timi JSON settings and recovery records into data/timi.json.");
         }
         Ok(Arc::new(Self{config,http:HttpClient::builder().user_agent("TimiBot/2.0").build()?,
-            store:Mutex::new(store),runtime:Mutex::new(Runtime::default())}))
+            store:Mutex::new(store),runtime:Mutex::new(Runtime::default()),callback_attempts:Mutex::new(HashSet::new())}))
     }
     fn persist(&self)->Result<()> {
         let data={let s=self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;serde_json::to_vec_pretty(&*s)?};
@@ -324,7 +324,11 @@ impl State {
         }
         bail!("Discord API request exhausted retries at {path}.")
     }
+    fn take_callback_attempt(&self,id:&str)->bool { self.callback_attempts.lock().map(|mut attempts|attempts.remove(id)).unwrap_or(true) }
+    fn clear_callback_attempt(&self,id:&str) { if let Ok(mut attempts)=self.callback_attempts.lock(){attempts.remove(id);} }
     async fn callback(&self,id:&str,t:&str,kind:u8,data:Option<Value>)->Result<()> {
+        { let mut attempts=self.callback_attempts.lock().map_err(|_|anyhow!("interaction callback lock poisoned"))?;
+          if !attempts.insert(id.to_owned()){bail!("Duplicate initial response prevented for Discord interaction {id}.");} }
         let mut v=json!({"type":kind});if let Some(d)=data{v["data"]=d;}
         self.api(Method::POST,&format!("/interactions/{id}/{t}/callback"),Some(v)).await?;Ok(())
     }

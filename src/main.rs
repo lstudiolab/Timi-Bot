@@ -11,7 +11,7 @@ use serenity::{
     Client as DiscordClient,
 };
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     env, fs,
     path::PathBuf,
     sync::{Arc, Mutex},
