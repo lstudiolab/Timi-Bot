@@ -14,7 +14,7 @@ export class Tickets {
       `**Category:** ${x.category_name}`,`**Support role:** ${x.support_role_id ? "<@&"+x.support_role_id+">" : "Not configured"}`,
       `**Transcript channel:** ${x.transcript_channel_id ? "<#"+x.transcript_channel_id+">" : "Not configured"}`,
       `**Panel channel:** ${x.panel_channel_id ? "<#"+x.panel_channel_id+">" : "Current channel"}`,
-      "","Edit a setting, then publish. This configuration response stays in place."].join("\n");
+      "","Placeholders: {user}, {username}, {user_tag}, {user_id}, {server}, {server_id}, {member_count}, {channel}, {channel_name}, {owner}, {owner_id}, {bot}, {bot_name}, {date}, {time}, {timestamp}.","Edit a setting, then publish. This configuration response stays in place."].join("\n");
   }
   settingsRows() { return [
     row(button("ticket:edit-panel","Edit panel"),button("ticket:edit-ticket","Edit ticket message"),button("ticket:edit-category","Edit category")),
