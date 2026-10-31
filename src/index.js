@@ -56,6 +56,11 @@ client.once(Events.ClientReady,async ready=>{
 });
 client.on(Events.InteractionCreate,async i=>{try{await handleInteraction(i);}catch(error){logger.error(`Interaction ${i.id} failed:`,error);if(!i.isRepliable())return;const p={content:"Timi could not complete that action. Check bot permissions and try again.",components:[],allowedMentions:{parse:[]}};if(i.deferred||i.replied)await i.editReply(p).catch(()=>{});else await i.reply({...p,ephemeral:true}).catch(()=>{});}});
 client.on(Events.MessageCreate,m=>{if(manager.installed(m.guildId,"Moderation"))libraries.Moderation.messageCreate(m).catch(e=>logger.error("Moderation message processing failed:",e));});
+client.on(Events.MessageDelete,m=>{if(m.guild&&manager.installed(m.guild.id,"Moderation"))libraries.Moderation.messageDelete(m).catch(e=>logger.error("Message delete log failed:",e));});
+client.on(Events.MessageUpdate,(oldMessage,newMessage)=>{if(newMessage.guild&&manager.installed(newMessage.guild.id,"Moderation"))libraries.Moderation.messageUpdate(oldMessage,newMessage).catch(e=>logger.error("Message edit log failed:",e));});
+client.on(Events.GuildMemberUpdate,(oldMember,newMember)=>{if(manager.installed(newMember.guild.id,"Moderation"))libraries.Moderation.memberUpdate(oldMember,newMember).catch(e=>logger.error("Member update log failed:",e));});
+client.on(Events.GuildBanAdd,ban=>{if(manager.installed(ban.guild.id,"Moderation"))libraries.Moderation.ban(ban.guild,ban.user).catch(e=>logger.error("Ban log failed:",e));});
+client.on(Events.GuildBanRemove,ban=>{if(manager.installed(ban.guild.id,"Moderation"))libraries.Moderation.ban(ban.guild,ban.user,true).catch(e=>logger.error("Unban log failed:",e));});
 client.on(Events.GuildMemberAdd,m=>{
  if(manager.installed(m.guild.id,"Moderation"))libraries.Moderation.guildMemberAdd(m).catch(e=>logger.error("Member join processing failed:",e));
  if(manager.installed(m.guild.id,"Foundation")){
