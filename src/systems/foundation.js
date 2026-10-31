@@ -1,5 +1,5 @@
 import { ChannelType, EmbedBuilder } from "discord.js";
-import { respond, deny, requireManager } from "../ui.js";
+import { respond, requireManager } from "../ui.js";
 
 export class Foundation {
   constructor(client,store,logger){this.client=client;this.store=store;this.logger=logger;}
@@ -12,7 +12,7 @@ export class Foundation {
     if(i.commandName==="server-info"){
       const g=i.guild;
       const embed=new EmbedBuilder().setColor(0x808080).setTitle(g.name).setThumbnail(g.iconURL({size:256}))
-        .addFields({name:"Owner",value:`<@!${g.ownerId}>`.replace("$",""),inline:true},
+        .addFields({name:"Owner",value:`<@${g.ownerId}>`,inline:true},
           {name:"Members",value:String(g.memberCount),inline:true},{name:"Channels",value:String(g.channels.cache.size),inline:true},
           {name:"Created",value:`<t:${Math.floor(g.createdTimestamp/1000)}:F>`});
       return respond(i,null,[],[embed]);
