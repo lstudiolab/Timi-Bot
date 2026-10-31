@@ -82,16 +82,22 @@ npm start
 
 Detach with `Ctrl+B`, then `D`. Reopen with `tmux attach -t timi`. Android may still stop background processes; keep Termux exempt from battery optimization.
 
+## Built-in libraries
+
+Timi is one integrated bot. Its three first-party libraries are included in the same codebase; they are not external plugins or third-party modules. Each server independently chooses which libraries to activate.
+
+- **Moderation** — moderation actions and cases, auto moderation, server protection, anti-raid and bot approval, activity archiving, and moderation logs.
+- **Support** — ticket setup, configurable panels, private tickets, staff threads, transcripts, permissions, and ticket logs.
+- **Foundation** — server utilities, message/embed builder, welcome and goodbye messages, role picker, and member verification.
+
+Only the server owner can install a library. Use `/library-list` to inspect the libraries and `/install-library` with the optional `libraryname` field to activate one. A library is inactive until installed. Its data is kept when it is not installed.
+
 ## Commands
 
-- `/ticket-setup` creates the ticket category and private Timi log/confirmation channels, then opens the setup wizard.
-- `/ticket-panel` publishes the configured ticket panel or edits its existing message.
-- `/ticket-settings` opens the ticket configuration controls.
-- `/moderation-settings` creates or updates the persistent moderation panel.
-- `/verify-settings` changes verification settings. Only the server owner can use it.
-- `/verify-panel` publishes or updates the verification panel.
-- `/setup-role-picker` creates a self-service role picker. Only the server owner can use it.
-- `/create-embed`, `/edit-embed`, and `/place-embed` manage reusable embeds.
+- Core: `/library-list`, `/install-library`.
+- Moderation: `/moderation-settings`.
+- Support: `/ticket-setup`, `/ticket-panel`, `/ticket-settings`.
+- Foundation: `/ping`, `/server-info`, `/user-info`, `/avatar`, `/welcome-settings`, `/verify-settings`, `/verify-panel`, `/setup-role-picker`, `/create-embed`, `/edit-embed`, `/place-embed`.
 
 ## Data and recovery
 
