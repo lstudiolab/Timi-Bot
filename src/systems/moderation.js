@@ -182,7 +182,8 @@ export class Moderation {
     }
   }
   async handle(i){
-    if(i.isChatInputCommand()&&i.commandName==="moderation-settings")return this.command(i);\n    if(i.isChatInputCommand()&&i.commandName==="automod-word")return this.wordCommand(i);
+    if(i.isChatInputCommand()&&i.commandName==="moderation-settings")return this.command(i);
+    if(i.isChatInputCommand()&&i.commandName==="automod-word")return this.wordCommand(i);
     if(i.isButton()&&i.customId.startsWith("modpanel:"))return this.component(i);
     if(i.isChannelSelectMenu()&&i.customId==="modpanel:log-select")return this.component(i);
     if(i.isModalSubmit()&&i.customId.startsWith("modpanel:"))return this.modalSubmit(i);
