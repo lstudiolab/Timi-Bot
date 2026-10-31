@@ -1,7 +1,7 @@
 local websocket = require("coro-websocket")
 local json = require("json")
 local uv = require("uv")
-local util = require("timi.util")
+local util = require("../timi/util")
 
 local Gateway = {}
 Gateway.__index = Gateway
