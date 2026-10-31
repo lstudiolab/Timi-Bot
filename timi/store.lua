@@ -1,6 +1,6 @@
 local fs = require("fs")
 local json = require("json")
-local util = require("timi.util")
+local util = require("./util")
 
 local Store = {}
 Store.__index = Store
