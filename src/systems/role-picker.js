@@ -9,7 +9,7 @@ export class RolePicker {
   constructor(client,store,logger,verification){this.client=client;this.store=store;this.logger=logger;this.verification=verification;}
   async command(i){
     if(!await requireOwner(i))return;
-    return respond(i,"**Role picker setup**\n\nCreate a self-service role menu. Configure its appearance, choose the allowed roles, then publish.",
+    return respond(i,"**Role picker setup**\n\nCreate a self-service role menu. Configure its appearance, choose the allowed roles, then publish. Text supports {user}, {username}, {user_tag}, {user_id}, {server}, {server_id}, {member_count}, {channel}, {channel_name}, {owner}, {owner_id}, {bot}, {bot_name}, {date}, {time}, and {timestamp}.",
       [row(button("rolepicker:start","Configure role picker",ButtonStyle.Primary))]);
   }
   async button(i){
