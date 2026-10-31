@@ -57,8 +57,9 @@ export class Tickets {
         return null;
       });
       if(!dest||!dest.isTextBased()||dest.guildId!==guild.id){
+        const staleChannelId=settings.panel_channel_id;
         settings.panel_channel_id=null;
-        settings.published_panels=(settings.published_panels||[]).filter(p=>p.channel_id!==settings.panel_channel_id);
+        settings.published_panels=(settings.published_panels||[]).filter(p=>p.channel_id!==staleChannelId);
         this.logger.warn("Cleared an invalid saved ticket panel destination.");
         dest=null;
       }
