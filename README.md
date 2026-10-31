@@ -94,7 +94,7 @@ Only the server owner can install a library. Use `/library-list` to inspect the 
 
 ## Commands
 
-- Core: `/library-list`, `/install-library`.
+- Core: `/library-list`, `/install-library`, `/uninstall-library`.
 - Moderation: `/moderation-settings`.
 - Support: `/ticket-setup`, `/ticket-panel`, `/ticket-settings`.
 - Foundation: `/ping`, `/server-info`, `/user-info`, `/avatar`, `/welcome-settings`, `/verify-settings`, `/verify-panel`, `/setup-role-picker`, `/create-embed`, `/edit-embed`, `/place-embed`.
