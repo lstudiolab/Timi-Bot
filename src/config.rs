@@ -238,7 +238,7 @@ impl State {
                     let recovered=serde_json::from_slice::<Store>(&fs::read(&backup)?)
                         .context("data/timi.json and data/timi.json.bak are both invalid")?;
                     let corrupt= config.data_dir.join(format!("timi.json.corrupt-{}",now()));
-                    fs::copy(&path,&corrupt).context("Could not preserve the invalid data/timi.json file")?;
+                    fs::rename(&path,&corrupt).context("Could not preserve the invalid data/timi.json file")?;
                     warn!("Recovered Timi data from timi.json.bak; preserved the invalid file at {}.",corrupt.display());
                     recovered
                 }
