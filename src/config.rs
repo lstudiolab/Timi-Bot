@@ -451,5 +451,5 @@ struct SavedEmbed {
 }
 impl Default for SavedEmbed {
     fn default()->Self{Self{guild_id:String::new(),name:String::new(),creator_id:String::new(),title:String::new(),description:String::new(),
-        color:0x5865F2,author:String::new(),footer:String::new(),thumbnail:String::new(),image:String::new(),url:String::new(),fields:Vec::new(),placements:Vec::new()}}
+        color:0x808080,author:String::new(),footer:String::new(),thumbnail:String::new(),image:String::new(),url:String::new(),fields:Vec::new(),placements:Vec::new()}}
 }
