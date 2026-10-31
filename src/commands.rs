@@ -20,7 +20,7 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             s.defer(id,t).await?;
             let message=s.send(&c,json!({"embeds":[embed_payload(&embed)],"allowed_mentions":{"parse":[]}})).await?;
             let message_id=message["id"].as_str().unwrap_or("").to_owned();
-            if !message_id.is_empty(){embed.placements.retain(|p|p.channel_id!=c);embed.placements.push(PanelRef{channel_id:c.clone(),message_id});s.save_embed(embed)?;}
+            if !message_id.is_empty(){embed.placements.push(PanelRef{channel_id:c.clone(),message_id});s.save_embed(embed)?;}
             s.edit_original(t,"Embed placed in this channel.").await}
 
         "create-embed"=>{if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to create embeds.",true).await;}
