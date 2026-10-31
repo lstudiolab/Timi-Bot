@@ -1,9 +1,9 @@
-local util = require("timi.util")
-local Tickets = require("timi.tickets")
-local Moderation = require("timi.moderation")
-local Verification = require("timi.verification")
-local RolePicker = require("timi.role_picker")
-local Embeds = require("timi.embeds")
+local util = require("./util")
+local Tickets = require("./tickets")
+local Moderation = require("./moderation")
+local Verification = require("./verification")
+local RolePicker = require("./role_picker")
+local Embeds = require("./embeds")
 
 local Commands = {}
 Commands.__index = Commands
