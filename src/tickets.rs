@@ -82,12 +82,11 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
         // A per-ticket guard prevents duplicate close jobs while the confirmation
         // button remains visible in Discord's ephemeral source message.
         let closing_key=format!("{g}:{c}");
-        {
+        let already_closing={
             let mut runtime=s.runtime.lock().map_err(|_|anyhow!("runtime lock poisoned"))?;
-            if !runtime.closing_tickets.insert(closing_key.clone()){
-                return s.edit_original(t,"This ticket is already closing.").await;
-            }
-        }
+            !runtime.closing_tickets.insert(closing_key.clone())
+        };
+        if already_closing{return s.edit_original(t,"This ticket is already closing.").await;}
         let cloned=s.clone();let guild=g.clone();let channel=c.clone();let closer=u.clone();let token=t.to_owned();let key=closing_key;
         tokio::spawn(async move{
             sleep(Duration::from_secs(5)).await;
