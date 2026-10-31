@@ -412,7 +412,7 @@ impl State {
         self.callback(id,t,4,Some(json!({"content":text,"flags":if ephemeral{64}else{0}}))).await
     }
     async fn defer(&self,id:&str,t:&str)->Result<()> {
-        self.defer_for(id,t,Duration::from_millis(1200)).await
+        self.defer_for(id,t,Duration::from_secs(5)).await
     }
     async fn defer_for(&self,id:&str,t:&str,minimum:Duration)->Result<()> {
         let already_acknowledged=self.callback_acknowledged.lock()

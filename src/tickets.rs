@@ -20,16 +20,16 @@ async fn component(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
     // Modal responses must be the initial callback. Every other component
     // gets a thinking duration sized to the work it triggers.
     if !component_opens_modal(&custom,manager,embed_exists){
-        let thinking=if custom=="ticket:open"{Duration::from_millis(4000)}
-            else if custom=="verify:start"{Duration::from_millis(3500)}
-            else if custom.starts_with("ticket:publish"){Duration::from_millis(2800)}
-            else if custom.starts_with("rolepicker:publish"){Duration::from_millis(2800)}
-            else if custom.starts_with("botguard:"){Duration::from_millis(2800)}
-            else if custom.starts_with("ticket:priority-select:"){Duration::from_millis(2200)}
-            else if custom.starts_with("rolepicker:menu:"){Duration::from_millis(1800)}
-            else if custom.starts_with("ticket:"){Duration::from_millis(1500)}
-            else if custom.starts_with("modpanel:")||custom.starts_with("verify:"){Duration::from_millis(1800)}
-            else{Duration::from_millis(1200)};
+        let thinking=if custom=="ticket:open"{Duration::from_secs(5)}
+            else if custom=="verify:start"{Duration::from_secs(5)}
+            else if custom.starts_with("ticket:publish"){Duration::from_secs(5)}
+            else if custom.starts_with("rolepicker:publish"){Duration::from_secs(5)}
+            else if custom.starts_with("botguard:"){Duration::from_secs(5)}
+            else if custom.starts_with("ticket:priority-select:"){Duration::from_secs(5)}
+            else if custom.starts_with("rolepicker:menu:"){Duration::from_secs(5)}
+            else if custom.starts_with("ticket:"){Duration::from_secs(5)}
+            else if custom.starts_with("modpanel:")||custom.starts_with("verify:"){Duration::from_secs(5)}
+            else{Duration::from_secs(5)};
         s.defer_for(id,t,thinking).await?;
     }
     if custom.starts_with("embed:"){return embed_component(s,id,t,&v,&custom).await;}

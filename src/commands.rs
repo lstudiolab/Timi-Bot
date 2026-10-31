@@ -6,11 +6,11 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
     // use a task-sized thinking state while their work runs.
     if name!="create-embed"||!manage_guild(&v){
         let thinking=match name{
-            "ticket-setup"=>Duration::from_millis(3500),
-            "ticket-panel"|"verify-panel"|"verify-settings"|"setup-role-picker"=>Duration::from_millis(2800),
-            "moderation-settings"|"place-embed"=>Duration::from_millis(2200),
-            "ticket-settings"=>Duration::from_millis(1500),
-            _=>Duration::from_millis(1200),
+            "ticket-setup"=>Duration::from_secs(5),
+            "ticket-panel"|"verify-panel"|"verify-settings"|"setup-role-picker"=>Duration::from_secs(5),
+            "moderation-settings"|"place-embed"=>Duration::from_secs(5),
+            "ticket-settings"=>Duration::from_secs(5),
+            _=>Duration::from_secs(5),
         };
         s.defer_for(id,t,thinking).await?;
     }
