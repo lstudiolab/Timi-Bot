@@ -39,7 +39,7 @@ export class Foundation {
       if(welcomeMessage!==null)s.welcome_message=welcomeMessage;
       if(goodbyeMessage!==null)s.goodbye_message=goodbyeMessage;
       this.store.save();
-      return respond(i,`**Welcome and goodbye settings saved.**\nWelcome channel: ${s.welcome_channel_id?`<#${s.welcome_channel_id}>`:"Disabled"}\nGoodbye channel: ${s.goodbye_channel_id?`<#${s.goodbye_channel_id}>`:"Disabled"}\n\nAvailable placeholders: `{user}`, `{username}`, `{server}`, `{member_count}`.`);
+      return respond(i,"Welcome and goodbye settings saved. Welcome channel: "+(s.welcome_channel_id?"<#"+s.welcome_channel_id+">":"Disabled")+". Goodbye channel: "+(s.goodbye_channel_id?"<#"+s.goodbye_channel_id+">":"Disabled")+". Placeholders: {user}, {username}, {server}, {member_count}.");
     }
   }
   render(template,member){
