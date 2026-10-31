@@ -1,5 +1,5 @@
 import { PermissionFlagsBits, ButtonStyle } from "discord.js";
-import { DAY, snowflakeTime, mentionRole, mentionChannel } from "../utils.js";
+import { DAY, snowflakeTime, mentionRole, mentionChannel, renderTemplate } from "../utils.js";
 import { greyEmbed, button, row, respond, deny, requireOwner, isManager } from "../ui.js";
 
 const P=PermissionFlagsBits;
@@ -46,7 +46,8 @@ export class Verification {
     const guild=i.guild,s=this.store.verify(guild.id);
     if(i.commandName==="verify-panel"){
       const existing=s.published_panels.find(p=>p.channel_id===i.channelId);
-      const payload={embeds:[greyEmbed(s.panel_title,s.panel_description)],components:[row(button("verify:start","Verify",ButtonStyle.Primary))]};
+      const templateContext={guild,user:i.user,member:i.member,channel:i.channel,client:this.client};
+      const payload={embeds:[greyEmbed(renderTemplate(s.panel_title,templateContext),renderTemplate(s.panel_description,templateContext))],components:[row(button("verify:start","Verify",ButtonStyle.Primary))]};
       if(existing){
         const msg=await i.channel.messages.fetch(existing.message_id).catch(()=>null);
         if(msg)await msg.edit(payload);else{const sent=await i.channel.send(payload);existing.message_id=sent.id;}
@@ -69,7 +70,7 @@ export class Verification {
     for(const p of s.published_panels){
       const ch=await guild.channels.fetch(p.channel_id).catch(()=>null);
       const msg=await ch?.messages.fetch(p.message_id).catch(()=>null);
-      await msg?.edit({embeds:[greyEmbed(s.panel_title,s.panel_description)],components:[row(button("verify:start","Verify",ButtonStyle.Primary))]}).catch(()=>{});
+      await msg?.edit({embeds:[greyEmbed(renderTemplate(s.panel_title,{guild,user:i.user,member:i.member,channel:ch,client:this.client}),renderTemplate(s.panel_description,{guild,user:i.user,member:i.member,channel:ch,client:this.client}))],components:[row(button("verify:start","Verify",ButtonStyle.Primary))]}).catch(()=>{});
     }
     return respond(i,"Verification settings saved. Existing panels have been refreshed.");
   }
