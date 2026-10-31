@@ -68,7 +68,7 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
         return s.edit_original(t,&format!("Ticket priority set to **{label}**.")).await;
     }
     if custom=="ticket:open"{s.defer(id,t).await?;return open_ticket(s,t,&g,&u).await;}
-    if custom=="ticket:close"||custom=="ticket:confirm-close"{
+    if custom=="ticket:close"||custom=="ticket:confirm-close"||custom=="ticket:cancel-close"{
         // Acknowledge the component as an update to its source message. This
         // avoids creating a second ephemeral response that can fail to render.
         s.defer_update(id,t).await?;
@@ -96,6 +96,7 @@ async fn ticket_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Re
             return Ok(());
         }
         if custom=="ticket:cancel-close"{
+            s.edit(&c,message_id,json!({"content":"Ticket closure cancelled.","components":[]})).await?;
             return Ok(());
         }
         let closing_key=format!("{g}:{c}");
