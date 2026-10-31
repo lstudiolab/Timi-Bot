@@ -23,6 +23,12 @@ async function coreCommand(i){
   const lines=manager.list().map(l=>`**${l.name}** — ${manager.installed(i.guildId,l.name)?"Installed":"Available"}\n${l.description}\nSystems: ${l.systems.join(", ")}`);
   return respond(i,"**Timi Library**\n\n"+lines.join("\n\n")+"\n\nUse /install-library and enter a libraryname.");
  }
+ if(i.commandName==="uninstall-library"){
+  if(i.guild.ownerId!==i.user.id)return respond(i,"Only the server owner can uninstall Timi libraries.");
+  const result=manager.uninstall(i.guildId,i.options.getString("libraryname"));
+  if(!result.ok)return respond(i,result.error);
+  return respond(i,`**${result.library.name}** is now disabled in this server. Its saved configuration and records have been preserved. Commands and controls from this library will remain inactive until it is installed again.`);
+ }
  if(i.commandName==="install-library"){
   if(i.guild.ownerId!==i.user.id)return respond(i,"Only the server owner can install Timi libraries.");
   const name=i.options.getString("libraryname");
@@ -35,7 +41,7 @@ async function coreCommand(i){
 async function handleInteraction(i){
  if(i.isRepliable()&&!opensModal(i))await startWorking(i);
  if(i.isChatInputCommand()){
-  if(["install-library","library-list"].includes(i.commandName))return coreCommand(i);
+  if(["install-library","uninstall-library","library-list"].includes(i.commandName))return coreCommand(i);
   const required=commandLibrary(i.commandName);if(!required)return;
   if(!manager.installed(i.guildId,required))return respond(i,`The **${required}** library is not installed in this server. Ask the owner to use /install-library.`);
   return libraries[required].handleInteraction(i);
