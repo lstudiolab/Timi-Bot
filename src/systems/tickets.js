@@ -57,7 +57,7 @@ export class Tickets {
 
     if(configuredId){
       // Prefer the guild cache; only make an API request when the channel is not cached.
-      if(/^\\d{15,22}$/.test(configuredId)){
+      if(/^\d{15,22}$/.test(configuredId)){
         dest=guild.channels.cache.get(configuredId)||null;
         if(!dest){
           try {
