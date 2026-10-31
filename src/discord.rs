@@ -53,8 +53,6 @@ async fn register_commands(s:&State)->Result<()>{
         {"name":"warnings","description":"View a member warning history.","default_member_permissions":"32","options":[{"type":6,"name":"member","description":"Member to inspect","required":true}]},
         {"name":"clear-warnings","description":"Clear a member warning history.","default_member_permissions":"32","options":[{"type":6,"name":"member","description":"Member to clear","required":true}]},
         {"name":"automod-word","description":"Manage blocked words and phrases.","default_member_permissions":"32","options":[{"type":3,"name":"action","description":"List, add, or remove","required":true,"choices":[{"name":"List","value":"list"},{"name":"Add","value":"add"},{"name":"Remove","value":"remove"}]},{"type":3,"name":"word","description":"Word or phrase","required":false,"max_length":80}]},
-        {"name":"lockdown","description":"Restrict @everyone from sending messages in channels.","default_member_permissions":"32"},
-        {"name":"unlockdown","description":"Remove Timi lockdown send-message denies.","default_member_permissions":"32"},
         {"name":"verify-settings","description":"Configure Timi risk-based verification (server owner only).","options":[
             {"type":8,"name":"role","description":"Role granted after passing","required":false},
             {"type":8,"name":"required-role","description":"Role required before verifying","required":false},

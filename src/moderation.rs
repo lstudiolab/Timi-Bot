@@ -19,7 +19,15 @@ async fn mod_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Resul
         "modpanel:enable"|"modpanel:disable"|"modpanel:log-select"|"modpanel:invites"|"modpanel:mentions"|"modpanel:caps"=>{},
         _=>return Ok(())
     }
-    // Acknowledge component clicks before saving, refreshing, or making any REST calls.
+    // Update the settings message directly for the enable/disable toggle.
+    // This avoids deferring an update and then separately editing the webhook
+    // response, which can fail and leave the panel showing a generic error.
+    if custom=="modpanel:enable"||custom=="modpanel:disable"{
+        next.enabled=custom=="modpanel:enable";
+        s.save_mods(&g,next.clone())?;
+        return s.callback(id,t,7,Some(json!({"content":mod_text(&next),"components":mod_components(&next)}))).await;
+    }
+    // Acknowledge other component clicks before saving or making REST calls.
     s.callback(id,t,6,None).await?;
     if custom=="modpanel:log-select"{
         let selected=v.pointer("/data/values/0").and_then(Value::as_str).unwrap_or("");
@@ -30,7 +38,6 @@ async fn mod_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Resul
         return s.edit_original(t,&format!("Log channel set to <#{selected}>.")).await;
     }
     match custom{
-        "modpanel:enable"|"modpanel:disable"=>next.enabled=custom=="modpanel:enable",
         "modpanel:invites"=>next.block_invites=!next.block_invites,
         "modpanel:mentions"=>next.block_mass_mentions=!next.block_mass_mentions,
         "modpanel:caps"=>next.block_excessive_caps=!next.block_excessive_caps,

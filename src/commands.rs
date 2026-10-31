@@ -49,14 +49,6 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             s.persist()?;
             s.reply(id,t,&result,true).await
         }
-        "lockdown"|"unlockdown"=>{
-            if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}s.defer(id,t).await?;
-            let channels=s.api(Method::GET,&format!("/guilds/{g}/channels"),None).await?;let locked=name=="lockdown";let mut changed=0usize;let bit=1u64<<11;
-            for ch in channels.as_array().into_iter().flatten().filter(|c|matches!(c["type"].as_u64(),Some(0|5|15))){let cid=ch["id"].as_str().unwrap_or("");if cid.is_empty(){continue;}let mut ovs=ch["permission_overwrites"].as_array().cloned().unwrap_or_default();let pos=ovs.iter().position(|o|o["id"].as_str()==Some(&g)&&o["type"].as_u64()==Some(0));
-                if locked{if let Some(i)=pos{let deny=ovs[i]["deny"].as_str().and_then(|x|x.parse::<u64>().ok()).unwrap_or(0)|bit;ovs[i]["deny"]=json!(deny.to_string());}else{ovs.push(json!({"id":g,"type":0,"allow":"0","deny":bit.to_string()}));}}else if let Some(i)=pos{let deny=ovs[i]["deny"].as_str().and_then(|x|x.parse::<u64>().ok()).unwrap_or(0)&!bit;ovs[i]["deny"]=json!(deny.to_string());}
-                if s.api(Method::PATCH,&format!("/channels/{cid}"),Some(json!({"permission_overwrites":ovs}))).await.is_ok(){changed+=1;}}
-            s.edit_original(t,&format!("{} lockdown across {changed} channels.",if locked{"Applied"}else{"Removed"})).await
-        }
         "create-embed"=>{if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to create embeds.",true).await;}
             return s.callback(id,t,9,Some(modal("embed:create","Create an embed",vec![
                 input("name","Embed name (no spaces)","",false,24),input("title","Embed title","",false,256),input("description","Embed description","",true,4000)
