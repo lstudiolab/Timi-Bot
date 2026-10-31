@@ -1,6 +1,7 @@
 import { ChannelType, EmbedBuilder } from "discord.js";
 import { respond, requireManager } from "../ui.js";
 import { renderTemplate, TEMPLATE_PLACEHOLDERS } from "../utils.js";
+import { applyGuildTheme } from "../styles.js";
 
 export class Foundation {
   constructor(client,store,logger){this.client=client;this.store=store;this.logger=logger;}
@@ -12,7 +13,7 @@ export class Foundation {
     if(i.commandName==="ping")return respond(i,`Pong. Gateway latency: ${this.client.ws.ping} ms.`);
     if(i.commandName==="server-info"){
       const g=i.guild;
-      const embed=new EmbedBuilder().setColor(0x808080).setTitle(g.name).setThumbnail(g.iconURL({size:256}))
+      const embed=applyGuildTheme(new EmbedBuilder().setColor(0x808080).setTitle(g.name).setThumbnail(g.iconURL({size:256})),this.store,g.id)
         .addFields({name:"Owner",value:`<@${g.ownerId}>`,inline:true},
           {name:"Members",value:String(g.memberCount),inline:true},{name:"Channels",value:String(g.channels.cache.size),inline:true},
           {name:"Created",value:`<t:${Math.floor(g.createdTimestamp/1000)}:F>`});
@@ -20,14 +21,14 @@ export class Foundation {
     }
     if(i.commandName==="user-info"){
       const user=i.options.getUser("user")||i.user,member=await i.guild.members.fetch(user.id).catch(()=>null);
-      const embed=new EmbedBuilder().setColor(0x808080).setTitle(user.tag).setThumbnail(user.displayAvatarURL({size:256}))
+      const embed=applyGuildTheme(new EmbedBuilder().setColor(0x808080).setTitle(user.tag).setThumbnail(user.displayAvatarURL({size:256})),this.store,i.guildId)
         .addFields({name:"User ID",value:user.id},{name:"Account created",value:`<t:${Math.floor(user.createdTimestamp/1000)}:F>`},
           {name:"Joined server",value:member?`<t:${Math.floor(member.joinedTimestamp/1000)}:F>`:"Not a server member"});
       return respond(i,null,[],[embed]);
     }
     if(i.commandName==="avatar"){
       const user=i.options.getUser("user")||i.user;
-      const embed=new EmbedBuilder().setColor(0x808080).setTitle(`${user.username}'s avatar`).setImage(user.displayAvatarURL({size:1024}));
+      const embed=applyGuildTheme(new EmbedBuilder().setColor(0x808080).setTitle(`${user.username}'s avatar`).setImage(user.displayAvatarURL({size:1024})),this.store,i.guildId);
       return respond(i,null,[],[embed]);
     }
     if(i.commandName==="welcome-settings"){

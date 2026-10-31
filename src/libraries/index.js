@@ -1,6 +1,7 @@
 import { createModerationLibrary } from "./Moderation/index.js";
 import { createSupportLibrary } from "./Support/index.js";
 import { createFoundationLibrary } from "./Foundation/index.js";
+import { createDeveloperLibrary } from "./Developer/index.js";
 
 export const LIBRARIES = Object.freeze({
   Moderation: Object.freeze({
@@ -20,6 +21,13 @@ export const LIBRARIES = Object.freeze({
     description:"General server tools and member experience systems.",
     systems:["Server utilities","Message and embed builder","Welcome and goodbye","Role management and role picker","Member verification"],
     create:createFoundationLibrary
+  }),
+  Developer: Object.freeze({
+    name:"Developer",
+    description:"The Pro-only TbScript workbench for creating, editing, testing, and managing custom Discord features.",
+    requiresPro:true,
+    systems:["TbScript parser and block transpiler","Code editor and saved projects","Visual component kit","Panel code editing","Run and stop testing","Version history and .tdl import/export","Owner-only editor access","Automatic structural brace repair"],
+    create:createDeveloperLibrary
   })
 });
 export function normalizeLibraryName(value){

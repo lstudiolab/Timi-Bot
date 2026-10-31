@@ -1,10 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fillDefaults } from "./utils.js";
+import { getGuildStorageBytes, getPlanForData, restoreGuildStorage, PLANS } from "./subscriptions.js";
 
 const defaults=()=>({
-  installed_libraries:{},welcome:{},tickets:{},moderation:{},verification:{},members:{},channels:{},messages:{},
-  role_picker_menus:{},role_picker_drafts:{},embeds:{},moderation_cases:{},moderation_jobs:{},automod_words:{},pending_bots:{}
+  installed_libraries:{},subscriptions:{},welcome:{},tickets:{},moderation:{},verification:{},members:{},channels:{},messages:{},
+  role_picker_menus:{},role_picker_drafts:{},embeds:{},moderation_cases:{},moderation_jobs:{},automod_words:{},pending_bots:{},
+  developer_projects:{},developer_history:{},developer_redo:{},developer_active:{},panel_scripts:{},customizations:{},library_data:{}
 });
 function readJson(file){
   try{if(!fs.existsSync(file))return null;const value=JSON.parse(fs.readFileSync(file,"utf8"));
@@ -103,10 +105,41 @@ export class Store{
     if(changed){this.save();this.logger.info("Imported or normalized legacy Timi settings and recovery data.");}
   }
   save(){
+    const previous=readJson(this.file);
+    const rejected=[];
+    if(previous){
+      const guildIds=new Set();
+      for(const collection of ["installed_libraries","welcome","tickets","moderation","verification","role_picker_menus","role_picker_drafts","developer_projects","developer_history","panel_scripts","customizations","library_data"]){
+        for(const id of Object.keys(this.data[collection]||{}))guildIds.add(id);
+        for(const id of Object.keys(previous[collection]||{}))guildIds.add(id);
+      }
+      for(const collection of ["embeds","members"]){
+        for(const key of Object.keys(this.data[collection]||{}))guildIds.add(key.split(":")[0]);
+        for(const key of Object.keys(previous[collection]||{}))guildIds.add(key.split(":")[0]);
+      }
+      for(const collection of ["role_picker_menus","role_picker_drafts"]){
+        for(const value of Object.values(this.data[collection]||{}))if(value?.guild_id)guildIds.add(value.guild_id);
+        for(const value of Object.values(previous[collection]||{}))if(value?.guild_id)guildIds.add(value.guild_id);
+      }
+      for(const guildId of guildIds){
+        const currentBytes=getGuildStorageBytes(this.data,guildId);
+        const previousBytes=getGuildStorageBytes(previous,guildId);
+        const tier=getPlanForData(this.data,guildId);
+        const limit=PLANS[tier].storageBytes;
+        if(currentBytes>limit&&currentBytes>previousBytes){
+          restoreGuildStorage(this.data,previous,guildId);
+          rejected.push({guildId,currentBytes,previousBytes,limit});
+        }
+      }
+    }
     const temp=this.file+".tmp";
-    if(fs.existsSync(this.file)&&readJson(this.file))fs.copyFileSync(this.file,this.backup);
+    if(previous)fs.copyFileSync(this.file,this.backup);
     fs.writeFileSync(temp,JSON.stringify(this.data,null,2),{mode:0o600});
     fs.renameSync(temp,this.file);
+    if(rejected.length){
+      for(const item of rejected)this.logger.warn("Storage quota rejected a guild data increase:",item.guildId,item.currentBytes,"/",item.limit);
+      throw new Error("Storage quota reached for one or more servers. Changes above the plan limit were discarded; upgrade to Timi Pro or remove saved content.");
+    }
   }
   queueSave(){
     if(this.pendingSave)return;

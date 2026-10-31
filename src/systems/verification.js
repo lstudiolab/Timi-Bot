@@ -1,6 +1,8 @@
 import { PermissionFlagsBits, ButtonStyle } from "discord.js";
 import { DAY, snowflakeTime, mentionRole, mentionChannel, renderTemplate } from "../utils.js";
 import { greyEmbed, button, row, respond, deny, requireOwner, isManager } from "../ui.js";
+import { applyPanelTbScript } from "../tbscript.js";
+import { applyGuildTheme, applyButtonTheme } from "../styles.js";
 
 const P=PermissionFlagsBits;
 export class Verification {
@@ -42,13 +44,28 @@ export class Verification {
     return `**Timi verification settings**\nVerified role: ${mentionRole(s.role_id)}\nRequired role: ${mentionRole(s.required_role_id)}\nMinimum account age: ${s.min_age_days} days\nReview channel: ${mentionChannel(s.review_channel_id)}\nThresholds: 80+ pass, 60–79 manual review, below 60 kick\nWeights: age 40, history 20, attempts 20, behavior 10, avatar 10
 Panel placeholders: {user}, {username}, {user_tag}, {user_id}, {server}, {server_id}, {member_count}, {channel}, {channel_name}, {owner}, {owner_id}, {bot}, {bot_name}, {date}, {time}, {timestamp}`;
   }
+  panelPayload(guild,channel,user,member){
+    const settings=this.store.verify(guild.id);
+    const context={guild,user,member,channel,client:this.client};
+    const embed=applyGuildTheme(greyEmbed(renderTemplate(settings.panel_title,context),renderTemplate(settings.panel_description,context)),this.store,guild.id);
+    const verifyButton=applyButtonTheme(button("verify:start","Verify",ButtonStyle.Primary),this.store,guild.id);
+    return applyPanelTbScript(this.store,guild.id,"verification",{embeds:[embed],components:[row(verifyButton)]},context);
+  }
+  async refresh(guild){
+    const settings=this.store.verify(guild.id);
+    const owner=await guild.members.fetch(guild.ownerId).catch(()=>null);
+    for(const panel of settings.published_panels||[]){
+      const channel=await guild.channels.fetch(panel.channel_id).catch(()=>null);
+      const message=await channel?.messages.fetch(panel.message_id).catch(()=>null);
+      if(message)await message.edit(this.panelPayload(guild,channel,owner?.user||null,owner||null)).catch(error=>this.logger.warn("Verification panel refresh failed:",error.message));
+    }
+  }
   async command(i){
     if(!await requireOwner(i))return;
     const guild=i.guild,s=this.store.verify(guild.id);
     if(i.commandName==="verify-panel"){
       const existing=s.published_panels.find(p=>p.channel_id===i.channelId);
-      const templateContext={guild,user:i.user,member:i.member,channel:i.channel,client:this.client};
-      const payload={embeds:[greyEmbed(renderTemplate(s.panel_title,templateContext),renderTemplate(s.panel_description,templateContext))],components:[row(button("verify:start","Verify",ButtonStyle.Primary))]};
+      const payload=this.panelPayload(guild,i.channel,i.user,i.member);
       if(existing){
         const msg=await i.channel.messages.fetch(existing.message_id).catch(()=>null);
         if(msg)await msg.edit(payload);else{const sent=await i.channel.send(payload);existing.message_id=sent.id;}
@@ -71,7 +88,7 @@ Panel placeholders: {user}, {username}, {user_tag}, {user_id}, {server}, {server
     for(const p of s.published_panels){
       const ch=await guild.channels.fetch(p.channel_id).catch(()=>null);
       const msg=await ch?.messages.fetch(p.message_id).catch(()=>null);
-      await msg?.edit({embeds:[greyEmbed(renderTemplate(s.panel_title,{guild,user:i.user,member:i.member,channel:ch,client:this.client}),renderTemplate(s.panel_description,{guild,user:i.user,member:i.member,channel:ch,client:this.client}))],components:[row(button("verify:start","Verify",ButtonStyle.Primary))]}).catch(()=>{});
+      await msg?.edit(this.panelPayload(guild,ch,i.user,i.member)).catch(()=>{});
     }
     return respond(i,"Verification settings saved. Existing panels have been refreshed.");
   }

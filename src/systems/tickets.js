@@ -4,6 +4,8 @@ import {
 } from "discord.js";
 import { cleanChannelName, chunkText, renderTemplate } from "../utils.js";
 import { GREY, greyEmbed, button, row, textInput, modal, respond, deny, requireManager } from "../ui.js";
+import { applyPanelTbScript } from "../tbscript.js";
+import { applyGuildTheme, applyButtonTheme } from "../styles.js";
 
 const P = PermissionFlagsBits;
 export class Tickets {
@@ -20,7 +22,13 @@ export class Tickets {
     row(button("ticket:edit-panel","Edit panel"),button("ticket:edit-ticket","Edit ticket message"),button("ticket:edit-category","Edit category")),
     row(button("ticket:edit-access","Edit support and transcript"),button("ticket:publish","Publish panel",ButtonStyle.Success))
   ]; }
-  payload(x,context={}) { return {embeds:[greyEmbed(renderTemplate(x.panel_title,context),renderTemplate(x.panel_description,context))],components:[row(button("ticket:open",renderTemplate(x.open_label,context),ButtonStyle.Primary))],allowedMentions:{parse:[]}}; }
+  payload(x,context={}) {
+    const guildId=context.guild?.id;
+    const embed=applyGuildTheme(greyEmbed(renderTemplate(x.panel_title,context),renderTemplate(x.panel_description,context)),this.store,guildId);
+    const openButton=applyButtonTheme(button("ticket:open",renderTemplate(x.open_label,context),ButtonStyle.Primary),this.store,guildId);
+    const base={embeds:[embed],components:[row(openButton)],allowedMentions:{parse:[]}};
+    return guildId?applyPanelTbScript(this.store,guildId,"ticket",base,context):base;
+  }
   async command(i) {
     if (!await requireManager(i)) return;
     const guild=i.guild, name=i.commandName;
@@ -144,7 +152,7 @@ export class Tickets {
       topic:`timi-ticket-owner:${i.user.id}`,permissionOverwrites});
     try {
       const templateContext={guild,user:i.user,member:i.member,channel:ch,client:this.client};
-      const emb=greyEmbed(renderTemplate(x.panel_title,templateContext),renderTemplate(x.ticket_message,templateContext)).addFields({name:"Priority",value:"Normal",inline:true});
+      const emb=applyGuildTheme(greyEmbed(renderTemplate(x.panel_title,templateContext),renderTemplate(x.ticket_message,templateContext)),this.store,guild.id).addFields({name:"Priority",value:"Normal",inline:true});
       await ch.send({content:renderTemplate("{user}",templateContext),embeds:[emb],components:[row(button("ticket:close",renderTemplate(x.close_label,templateContext),ButtonStyle.Danger),button("ticket:priority","Set priority",ButtonStyle.Primary))],allowedMentions:{users:[i.user.id]}});
     } catch(e) { await ch.delete().catch(()=>{}); throw e; }
     let note="";

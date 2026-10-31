@@ -29,6 +29,7 @@ export function createModerationLibrary({client,store,logger,foundation}){
     async guildMemberAdd(member){await protection.memberJoin(member);},
     channelCreate(channel){recovery.snapshot(channel);},
     channelUpdate(oldChannel,channel){recovery.snapshot(channel);},
-    async channelDelete(channel){await recovery.onChannelDelete(channel);}
+    async channelDelete(channel){await recovery.onChannelDelete(channel);},
+    async refreshPanel(guild){await moderation.refresh(guild,store.mods(guild.id));}
   };
 }

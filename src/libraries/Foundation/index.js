@@ -20,6 +20,8 @@ export function createFoundationLibrary({client,store,logger}){
     if(id.startsWith("embed:"))return embeds.handle(i);
     },
     async guildMemberAdd(member){await utilities.memberAdd(member);},
-    async guildMemberRemove(member){await utilities.memberRemove(member);}
+    async guildMemberRemove(member){await utilities.memberRemove(member);},
+    async refreshVerification(guild){await verification.refresh(guild);},
+    async refreshRolePickers(guild){await rolePicker.refresh(guild);}
   };
 }

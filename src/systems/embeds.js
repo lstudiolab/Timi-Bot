@@ -1,11 +1,12 @@
 import { PermissionFlagsBits, TextInputStyle, ButtonStyle, EmbedBuilder } from "discord.js";
 import { greyEmbed,button,row,textInput,modal,respond,deny,requireManager } from "../ui.js";
 import { renderTemplate } from "../utils.js";
+import { applyGuildTheme } from "../styles.js";
 
 export class Embeds {
   constructor(client,store,logger){this.client=client;this.store=store;this.logger=logger;}
   payload(x,context={}){
-    const e=new EmbedBuilder().setColor(0x808080);
+    const e=applyGuildTheme(new EmbedBuilder().setColor(0x808080),this.store,context.guild?.id);
     if(x.title)e.setTitle(renderTemplate(x.title,context));if(x.description)e.setDescription(renderTemplate(x.description,context));if(x.url)e.setURL(renderTemplate(x.url,context));
     if(x.author)e.setAuthor({name:renderTemplate(x.author,context)});if(x.footer)e.setFooter({text:renderTemplate(x.footer,context)});
     if(x.thumbnail)e.setThumbnail(x.thumbnail);if(x.image)e.setImage(x.image);

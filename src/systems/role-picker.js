@@ -4,6 +4,8 @@ import {
 } from "discord.js";
 import { requireOwner, respond, deny, modal, textInput, row, button, greyEmbed } from "../ui.js";
 import { isSnowflake, renderTemplate } from "../utils.js";
+import { applyPanelTbScript } from "../tbscript.js";
+import { applyGuildTheme, applyButtonTheme } from "../styles.js";
 
 export class RolePicker {
   constructor(client,store,logger,verification){this.client=client;this.store=store;this.logger=logger;this.verification=verification;}
@@ -56,9 +58,19 @@ export class RolePicker {
       .addOptions(menu.roles.map(role=>({label:role.name.slice(0,100),value:role.id})));
     const components=[row(select)];
     if(menu.footer_text&&menu.footer_channel_id){
-      components.push(row(button("rolepicker:footer-link:"+menu.id,renderTemplate(menu.footer_text,context).slice(0,80))));
+      components.push(row(applyButtonTheme(button("rolepicker:footer-link:"+menu.id,renderTemplate(menu.footer_text,context).slice(0,80)),this.store,menu.guild_id)));
     }
-    return {embeds:[greyEmbed(renderTemplate(menu.title,context),renderTemplate(menu.description,context))],components,allowedMentions:{parse:[]}};
+    const base={embeds:[applyGuildTheme(greyEmbed(renderTemplate(menu.title,context),renderTemplate(menu.description,context)),this.store,menu.guild_id)],components,allowedMentions:{parse:[]}};
+    return applyPanelTbScript(this.store,menu.guild_id,"role-picker",base,context);
+  }
+  async refresh(guild){
+    const owner=await guild.members.fetch(guild.ownerId).catch(()=>null);
+    for(const menu of Object.values(this.store.data.role_picker_menus||{})){
+      if(menu.guild_id!==guild.id||!menu.channel_id||!menu.message_id)continue;
+      const channel=await guild.channels.fetch(menu.channel_id).catch(()=>null);
+      const message=await channel?.messages.fetch(menu.message_id).catch(()=>null);
+      if(message)await message.edit(this.publicPayload(menu,{guild,channel,user:owner?.user||null,member:owner||null,client:this.client})).catch(error=>this.logger.warn("Role picker refresh failed:",error.message));
+    }
   }
   async modalSubmit(i){
     if(i.customId!=="rolepicker:details")return;

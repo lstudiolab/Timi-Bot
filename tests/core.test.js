@@ -89,8 +89,9 @@ test("legacy configuration files are imported without overwriting new data",()=>
 import { LibraryManager } from "../src/module-manager.js";
 import { LIBRARIES, normalizeLibraryName } from "../src/libraries/index.js";
 
-test("Timi exposes three concrete first-party libraries",()=>{
-  assert.deepEqual(Object.keys(LIBRARIES),["Moderation","Support","Foundation"]);
+test("Timi exposes four concrete first-party libraries including Pro-only Developer",()=>{
+  assert.deepEqual(Object.keys(LIBRARIES),["Moderation","Support","Foundation","Developer"]);
+  assert.equal(LIBRARIES.Developer.requiresPro,true);
   for(const library of Object.values(LIBRARIES)){
     assert.equal(typeof library.create,"function");
     assert.ok(library.systems.length>0);
@@ -125,6 +126,9 @@ test("library management commands are registered with the intended option behavi
   assert.equal(install.options[0].required,false);
   assert.equal(uninstall.options[0].required,true);
   assert.ok(commandData.some(command=>command.name==="automod-word"));
+  for(const name of ["timi-plan","timi-customize","code","code-edit","code-template","code-docs","code-validate","code-run","code-stop","code-undo","code-redo","code-import","code-export"]) {
+    assert.ok(commandData.some(command=>command.name===name),"missing slash command: "+name);
+  }
 });
 
 
@@ -144,5 +148,103 @@ test("pending moderation jobs survive a process restart",()=>{
     assert.equal(job.status,"pending");
     assert.equal(job.user_id,"user-a");
     assert.deepEqual(job.steps,{deleted:false,sanction:false,logged:false});
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+import { parseTbScript, compileTbScript, autoFixTbScript, renderTbScript } from "../src/tbscript.js";
+import { PLANS, getGuildPlan, getStorageReport, canStoreGuildState, setGuildSubscription } from "../src/subscriptions.js";
+
+test("TbScript keeps the nested brace-block syntax and transpiles each instruction",()=>{
+  const source=[
+    "{",
+    '   {title:"Welcome"}',
+    '   {description:"Hello, {user}!"}',
+    '   {addbutton:true:"Verify":"":false}',
+    '   {onclick(button):giverole:"Member"}',
+    '   {ephemeral:true}',
+    "}"
+  ].join("\n");
+  const parsed=parseTbScript(source);
+  assert.equal(parsed.ok,true);
+  assert.equal(parsed.ast.children.length,5);
+  const compiled=compileTbScript(source);
+  assert.equal(compiled.ok,true);
+  assert.equal(compiled.output.title,"Welcome");
+  assert.equal(compiled.output.ephemeral,true);
+  assert.equal(compiled.output.buttons[0].action.type,"giverole");
+  assert.equal(compiled.output.buttons[0].action.role,"Member");
+  assert.equal(compiled.instructions.length,5);
+});
+
+test("TbScript parses nested modal input blocks and renders components",()=>{
+  const source=[
+    "{",
+    '   {title:"Contact"}',
+    '   {modal:"Contact form"',
+    '      {input:"Subject":"Your subject"}',
+    '      {input:"Details":"More details":true}',
+    "   }",
+    "}"
+  ].join("\n");
+  const compiled=compileTbScript(source);
+  assert.equal(compiled.ok,true);
+  assert.equal(compiled.output.modal.inputs.length,2);
+  const rendered=renderTbScript(compiled,{scope:"test"});
+  assert.equal(rendered.embeds[0].data.title,"Contact");
+  assert.equal(rendered.components.length,1);
+});
+
+test("TbScript reports invalid syntax and does not accept statement semicolons",()=>{
+  assert.equal(compileTbScript('{\n  {title:"valid"};\n}').ok,false);
+  const invalid=compileTbScript('{\n  {unknown:"value"}\n}');
+  assert.equal(invalid.ok,false);
+  assert.match(invalid.errors[0],/Unknown TbScript keyword/);
+});
+
+test("TbScript structural auto-fix only adds missing closing braces",()=>{
+  const source='{\n  {title:"Fixed"}';
+  const fixed=autoFixTbScript(source);
+  assert.equal((fixed.match(/}/g)||[]).length,2);
+  assert.equal(compileTbScript(fixed).ok,true);
+});
+
+test("Timi Free and Pro plans expose the agreed storage and pricing",()=>{
+  assert.equal(PLANS.free.storageBytes,5*1024*1024);
+  assert.equal(PLANS.pro.storageBytes,12*1024*1024);
+  assert.equal(PLANS.pro.priceMonthly,4.99);
+  assert.equal(PLANS.pro.priceAnnual,49.99);
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),"timi-plans-"));
+  try{
+    const store=new Store(dir,quiet);
+    assert.equal(getGuildPlan(store,"guild-plan"),"free");
+    assert.equal(getStorageReport(store,"guild-plan").limit,5*1024*1024);
+    setGuildSubscription(store,"guild-plan",{tier:"pro",period:"annual"});
+    assert.equal(getGuildPlan(store,"guild-plan"),"pro");
+    assert.equal(getStorageReport(store,"guild-plan").limit,12*1024*1024);
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test("storage allocation is evaluated per guild and by subscription tier",()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),"timi-storage-"));
+  try{
+    const store=new Store(dir,quiet);
+    const source="x".repeat(5*1024*1024+1024);
+    const projects={...(store.data.developer_projects||{}),["guild-free"]:{large:{source}}};
+    const report=canStoreGuildState(store,"guild-free",{developer_projects:projects});
+    assert.equal(report.ok,false);
+    setGuildSubscription(store,"guild-pro",{tier:"pro",period:"annual"});
+    const proProjects={...(store.data.developer_projects||{}),["guild-pro"]:{large:{source}}};
+    assert.equal(canStoreGuildState(store,"guild-pro",{developer_projects:proProjects}).ok,true);
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test("Developer library is Pro-only and its commands are registered only as library commands",()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),"timi-developer-lib-"));
+  try{
+    const store=new Store(dir,quiet),manager=new LibraryManager(store,quiet);
+    assert.equal(manager.install("guild-dev","Developer").code,"pro_required");
+    setGuildSubscription(store,"guild-dev",{tier:"pro",period:"annual"});
+    assert.equal(manager.install("guild-dev","Developer").ok,true);
+    assert.equal(manager.installed("guild-dev","Developer"),true);
   }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });

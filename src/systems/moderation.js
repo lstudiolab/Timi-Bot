@@ -1,6 +1,7 @@
 import { PermissionFlagsBits, ButtonStyle, TextInputStyle, ChannelType, ChannelSelectMenuBuilder } from "discord.js";
 import { normalizeMessage, jaccard, mentionChannel } from "../utils.js";
 import { button,row,textInput,modal,respond,deny,requireManager } from "../ui.js";
+import { applyPanelTbScript } from "../tbscript.js";
 
 const P=PermissionFlagsBits;
 export class Moderation {
@@ -76,9 +77,13 @@ export class Moderation {
     row(button("modpanel:duration","Action duration"),button("modpanel:max-count","Max messages")),
     row(button("modpanel:invites","Toggle invites"),button("modpanel:mentions","Toggle mentions"),button("modpanel:caps","Toggle caps"))
   ];}
+  panelPayload(guild,x,channel,user=null,member=null){
+    const base={content:this.text(x),components:this.rows(x),allowedMentions:{parse:[]}};
+    return applyPanelTbScript(this.store,guild.id,"moderation",base,{guild,channel,user,member,client:this.client});
+  }
   async refresh(guild,x){
     if(!x.panel_channel_id||!x.panel_message_id)return;
-    try{const c=await guild.channels.fetch(x.panel_channel_id),m=await c.messages.fetch(x.panel_message_id);await m.edit({content:this.text(x),components:this.rows(x)});}
+    try{const c=await guild.channels.fetch(x.panel_channel_id),m=await c.messages.fetch(x.panel_message_id);await m.edit(this.panelPayload(guild,x,c));}
     catch(e){this.logger.warn("Could not update moderation panel:",e.message);}
   }
   async command(i){
@@ -87,10 +92,10 @@ export class Moderation {
     const x=this.store.mods(i.guildId);
     if(x.panel_channel_id&&x.panel_message_id){
       try{const c=await i.guild.channels.fetch(x.panel_channel_id),m=await c.messages.fetch(x.panel_message_id);
-        await m.edit({content:this.text(x),components:this.rows(x)});return respond(i,"The existing moderation settings panel was updated.");}
+        await m.edit(this.panelPayload(i.guild,x,i.channel,i.user,i.member));return respond(i,"The existing moderation settings panel was updated.");}
       catch{x.panel_channel_id="";x.panel_message_id="";}
     }
-    const sent=await i.channel.send({content:this.text(x),components:this.rows(x),allowedMentions:{parse:[]}});
+    const sent=await i.channel.send(this.panelPayload(i.guild,x,i.channel,i.user,i.member));
     x.panel_channel_id=i.channelId;x.panel_message_id=sent.id;this.store.save();
     return respond(i,"A persistent moderation settings panel was created in this channel.");
   }

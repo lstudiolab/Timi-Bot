@@ -29,6 +29,7 @@ export function loadConfig(root = process.cwd()) {
   const guildId = get("GUILD_ID").trim() || null;
   const dataDir = path.resolve(root, get("DATA_DIR").trim() || "data");
   const logLevel = (get("LOG_LEVEL").trim() || "info").toLowerCase();
+  const proCheckoutUrl = get("TIMI_PRO_CHECKOUT_URL").trim();
 
   if (!token || token === "your_discord_bot_token") {
     throw new Error("DISCORD_TOKEN is missing or empty. Set it in .env.");
@@ -40,7 +41,7 @@ export function loadConfig(root = process.cwd()) {
     throw new Error("GUILD_ID must be a numeric Discord server ID, or blank.");
   }
   fs.mkdirSync(dataDir, { recursive: true });
-  return { token, clientId, guildId, dataDir, logLevel };
+  return { token, clientId, guildId, dataDir, logLevel, proCheckoutUrl };
 }
 
 export function createLogger(level = "info") {
