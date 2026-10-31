@@ -1,8 +1,3 @@
-local package_path = "./?.lua;./?/init.lua;./deps/?.lua;./deps/?/init.lua;"
-package.path = package_path .. package.path
-
--- Lit installs third-party modules into ./deps. Add that directory before
--- loading application modules so require("fs"), require("json"), etc. resolve.
 local config_module = require("timi.config")
 local Store = require("timi.store")
 local Rest = require("discord.rest")
