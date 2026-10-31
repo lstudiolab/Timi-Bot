@@ -1,11 +1,13 @@
-package.path = "./?.lua;./?/init.lua;" .. package.path
+local package_path = "./?.lua;./?/init.lua;"
+package.path = package_path .. package.path
 
+-- Luvit loads deps/require.lua before main.lua when installed through Lit.
 local config_module = require("timi.config")
 local Store = require("timi.store")
 local Rest = require("discord.rest")
 local Interactions = require("discord.interactions")
 local Gateway = require("discord.gateway")
-local util = require("./timi/util")
+local util = require("timi.util")
 local Commands = require("timi.commands")
 local Events = require("timi.events")
 

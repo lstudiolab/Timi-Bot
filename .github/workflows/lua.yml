@@ -13,6 +13,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y luajit
+      - name: Check Lit package metadata
+        run: |
+          luajit -e 'local p = assert(loadfile("package.lua"))(); assert(p.name == "lstudiolab/timi-bot"); assert(p.version); assert(#p.dependencies >= 3); print("Lit package metadata OK")'
       - name: Check Lua syntax
         run: |
           find . -name '*.lua' -not -path './deps/*' -print0 | while IFS= read -r -d '' file; do
