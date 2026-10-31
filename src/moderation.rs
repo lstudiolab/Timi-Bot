@@ -28,7 +28,19 @@ async fn mod_component(s:&Arc<State>,id:&str,t:&str,v:&Value,custom:&str)->Resul
         // Disk persistence is debounced and logged independently, so a successful
         // Discord message update cannot later be replaced by a generic error.
         s.queue_mods(&g,next.clone())?;
-        s.callback(id,t,7,Some(json!({"content":mod_text(&next),"components":mod_components(&next)}))).await?;
+        if let Err(error)=s.callback(id,t,7,Some(json!({"content":mod_text(&next),"components":mod_components(&next)}))).await {
+            let detail=format!("{error:#}");
+            // Discord can apply an interaction callback and then the HTTP
+            // response can be lost or arrive after the interaction was consumed.
+            // In that case a retry/late acknowledgement returns 10062 even though
+            // the panel has already been updated. Never let the global handler
+            // overwrite that panel with a generic failure message.
+            if detail.contains("10062") || detail.contains("Unknown interaction") {
+                warn!("Moderation toggle callback was already consumed by Discord; keeping the panel update and avoiding a second response.");
+                return Ok(());
+            }
+            return Err(error);
+        }
         return Ok(());
     }
     // Acknowledge other component clicks before saving or making REST calls.
