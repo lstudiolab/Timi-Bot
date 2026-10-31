@@ -2,6 +2,9 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
     let name=v.pointer("/data/name").and_then(Value::as_str).unwrap_or("");
     let g=guild_id(&v);let c=channel_id(&v);let u=user_id(&v);
     let opts=v.pointer("/data/options").cloned().unwrap_or(json!([]));
+    // Discord only shows its native thinking state when a command is deferred.
+    // Modal-opening commands must remain an immediate type-9 response.
+    if name!="create-embed"{s.defer(id,t).await?;}
     if g.is_empty(){return s.reply(id,t,"This command can only be used in a server.",true).await;}
     match name{
         "create-embed"=>{if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to create embeds.",true).await;}
@@ -12,13 +15,11 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to edit embeds.",true).await;}
             let name=opt_str(&opts,"name").unwrap_or_default();
             let Some(embed)=s.embed(&g,&name) else{return s.reply(id,t,"No saved embed with that name. Use /create-embed first.",true).await;};
-            s.defer(id,t).await?;
             return s.edit_original_with_components(t,&embed_editor_text(&embed),embed_editor_components(&embed)).await;}
         "place-embed"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to place embeds.",true).await;}
             let name=opt_str(&opts,"name").unwrap_or_default();
             let Some(mut embed)=s.embed(&g,&name) else{return s.reply(id,t,"No saved embed with that name. Use /create-embed first.",true).await;};
-            s.defer(id,t).await?;
             let message=s.send(&c,json!({"embeds":[embed_payload(&embed)],"allowed_mentions":{"parse":[]}})).await?;
             let message_id=message["id"].as_str().unwrap_or("").to_owned();
             if !message_id.is_empty(){embed.placements.push(PanelRef{channel_id:c.clone(),message_id});s.save_embed(embed)?;}
@@ -26,12 +27,10 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
 
         "ticket-setup"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}
-            s.defer(id,t).await?;
             match setup(s,&g,&u,t).await{Ok(())=>Ok(()),Err(error)=>{error!("Ticket setup failed in guild {g}: {error:#}");s.edit_original(t,"Setup failed. Check Manage Channels permission and role hierarchy.").await}}
         }
         "ticket-panel"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to publish ticket panels.",true).await;}
-            s.defer(id,t).await?;
             match publish_ticket(s,&g,&c,s.ticket(&g)).await{
                 Ok(destination)=>s.edit_original(t,&format!("Ticket panel published or updated in <#{destination}>.")).await,
                 Err(error)=>{error!("Ticket panel publication failed in guild {g}: {error:#}");s.edit_original(t,"Timi could not publish the ticket panel. Check channel permissions and configuration.").await}
@@ -39,13 +38,11 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
         }
         "ticket-settings"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to configure tickets.",true).await;}
-            s.defer(id,t).await?;
             let settings=s.ticket(&g);
             s.edit_original_with_components(t,&ticket_text(&settings),ticket_components()).await
         }
         "moderation-settings"=>{
             if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to change moderation settings.",true).await;}
-            s.defer(id,t).await?;
             let mut settings=s.mods(&g);
             if !settings.panel_channel_id.is_empty()&&!settings.panel_message_id.is_empty(){
                 if s.edit(&settings.panel_channel_id,&settings.panel_message_id,
@@ -64,7 +61,6 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
         "verify-settings"=>{
             // Acknowledge immediately so Discord does not expire the interaction
             // while Timi checks ownership, roles, and channel configuration.
-            s.defer(id,t).await?;
             let server=match s.api(Method::GET,&format!("/guilds/{g}"),None).await{
                 Ok(server)=>server,
                 Err(error)=>{
@@ -120,7 +116,6 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
             Ok(())
         }
         "setup-role-picker"=>{
-            s.defer(id,t).await?;
             let server=match s.api(Method::GET,&format!("/guilds/{g}"),None).await{
                 Ok(value)=>value,
                 Err(error)=>{error!("Could not fetch guild {g} while opening role picker setup: {error:#}");return s.edit_original(t,"Timi could not check server ownership. Please try again.").await;}
@@ -131,7 +126,6 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
         "verify-panel"=>{
             // Fetching server ownership and publishing the panel require REST calls.
             // Defer first; the follow-up edits the acknowledged response.
-            s.defer(id,t).await?;
             let server=s.api(Method::GET,&format!("/guilds/{g}"),None).await?;
             if server.get("owner_id").and_then(Value::as_str)!=Some(&u){return s.reply(id,t,"Only the server owner can publish the verification panel.",true).await;}
             let mut x=s.verify(&g);
