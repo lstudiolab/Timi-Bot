@@ -50,36 +50,67 @@ export class Tickets {
     return respond(i,`Ticket panel published or updated in <#${dest.id}>.`);
   }
   async publish(guild,current,settings) {
+    // Older or manually edited data files may not contain a valid panel list.
+    if(!Array.isArray(settings.published_panels)) settings.published_panels=[];
     let dest=null;
-    if(settings.panel_channel_id){
-      dest=await guild.channels.fetch(settings.panel_channel_id).catch(error=>{
-        this.logger.warn("Saved ticket panel destination is unavailable; falling back to the current channel:",error.message);
-        return null;
-      });
-      if(!dest||!dest.isTextBased()||dest.guildId!==guild.id){
-        const staleChannelId=settings.panel_channel_id;
+    const configuredId=String(settings.panel_channel_id||"").trim();
+
+    if(configuredId){
+      // Prefer the guild cache; only make an API request when the channel is not cached.
+      if(/^\\d{15,22}$/.test(configuredId)){
+        dest=guild.channels.cache.get(configuredId)||null;
+        if(!dest){
+          try {
+            dest=await guild.channels.fetch(configuredId);
+          } catch(error) {
+            // Discord 10003 means the saved channel was deleted or no longer exists.
+            // Other fetch failures also fall back safely, but are logged distinctly.
+            if(error?.code===10003||error?.status===404){
+              this.logger.warn(`Saved ticket panel channel ${configuredId} no longer exists in guild ${guild.id}; using the command channel.`);
+            } else {
+              this.logger.warn(`Could not fetch saved ticket panel channel ${configuredId} in guild ${guild.id}; using the command channel:`,error.message);
+            }
+            dest=null;
+          }
+        }
+      }
+
+      if(!dest||!dest.isTextBased()||typeof dest.send!=="function"||dest.guildId!==guild.id){
         settings.panel_channel_id=null;
-        settings.published_panels=(settings.published_panels||[]).filter(p=>p.channel_id!==staleChannelId);
-        this.logger.warn("Cleared an invalid saved ticket panel destination.");
+        settings.published_panels=settings.published_panels.filter(p=>p?.channel_id!==configuredId);
+        this.store.data.tickets[guild.id]=settings;
+        this.store.save();
+        this.logger.warn(`Cleared invalid saved ticket panel destination ${configuredId} for guild ${guild.id}.`);
         dest=null;
       }
     }
+
     dest=dest||current;
-    if(!dest?.isTextBased()||dest.guildId!==guild.id) throw new Error("Run the ticket panel command in a server text channel, or configure a valid panel destination.");
-    const existing=(settings.published_panels||[]).find(p=>p.channel_id===dest.id);
-    if (existing) {
-      const old=await dest.messages.fetch(existing.message_id).catch(()=>null);
-      if (old) await old.edit(this.payload(settings));
-      else {
+    if(!dest?.isTextBased()||typeof dest.send!=="function"||dest.guildId!==guild.id){
+      throw new Error("Run the ticket panel command in a server text channel, or configure a valid panel destination.");
+    }
+
+    const existing=settings.published_panels.find(p=>p?.channel_id===dest.id);
+    if(existing){
+      const oldMessage=await dest.messages.fetch(existing.message_id).catch(error=>{
+        this.logger.warn(`Saved ticket panel message ${existing.message_id} is unavailable in channel ${dest.id}; a replacement will be posted:`,error.message);
+        return null;
+      });
+      if(oldMessage){
+        await oldMessage.edit(this.payload(settings));
+      }else{
         const sent=await dest.send(this.payload(settings));
-        settings.published_panels=settings.published_panels.filter(p=>p.channel_id!==dest.id);
+        settings.published_panels=settings.published_panels.filter(p=>p?.channel_id!==dest.id);
         settings.published_panels.push({channel_id:dest.id,message_id:sent.id});
       }
-    } else {
+    }else{
       const sent=await dest.send(this.payload(settings));
       settings.published_panels.push({channel_id:dest.id,message_id:sent.id});
     }
-    settings.panel_channel_id=dest.id; this.store.data.tickets[guild.id]=settings; this.store.save();
+
+    settings.panel_channel_id=dest.id;
+    this.store.data.tickets[guild.id]=settings;
+    this.store.save();
     return dest;
   }
   async refresh(settings) {
