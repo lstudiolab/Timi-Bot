@@ -45,6 +45,14 @@ async fn moderate(s:&Arc<State>,msg:&Message)->Result<()>{
     if msg.author.bot||is_guild_owner(s,&g,&u).await{return Ok(());}let settings=s.mods(&g);if !settings.enabled{return Ok(());}
     let Some(member)=msg.member.as_ref()else{return Ok(());};if is_mod(s,&g,&member.roles).await{return Ok(());}
     let key=format!("{g}:{}:{u}",msg.channel_id.get());let timestamp=now();let content=normalize(&msg.content);
+    let blocked=s.store.lock().ok().and_then(|store|store.automod_words.get(&g).cloned()).unwrap_or_default();
+    if let Some(word)=blocked.iter().find(|word|!word.is_empty()&&msg.content.to_lowercase().contains(word.as_str())){
+        let reason=format!("blocked word or phrase: {word}");
+        let _=s.api(Method::DELETE,&format!("/channels/{}/messages/{}",msg.channel_id.get(),msg.id.get()),None).await;
+        s.update_member(&g,&u,|r|{r.suspicious+=1;r.last_suspicious=now();r.last_reason=reason.clone();})?;
+        log_to(s,&g,&settings.log_channel_id,&format!("AutoMod removed a message from <@{u}> in <#{}>. Reason: {reason}.",msg.channel_id.get())).await;
+        return Ok(());
+    }
     let mentions=msg.mentions.len()+msg.mention_roles.len();
     let invite=Regex::new(r"(?i)(discord\.gg/|discord(?:app)?\.com/invite/)").unwrap().is_match(&msg.content);
     let letters:Vec<char>=msg.content.chars().filter(|c|c.is_ascii_alphabetic()).collect();
