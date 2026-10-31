@@ -9,6 +9,7 @@ import { RolePicker } from "./systems/role-picker.js";
 import { Embeds } from "./systems/embeds.js";
 import { Protection } from "./systems/protection.js";
 import { Recovery } from "./systems/recovery.js";
+import { startWorking } from "./ui.js";
 
 const config=loadConfig();
 const logger=createLogger(config.logLevel);
@@ -42,7 +43,16 @@ client.once(Events.ClientReady,async ready=>{
   }
 });
 
+function opensModal(interaction){
+  if(interaction.isChatInputCommand())return interaction.commandName==="create-embed";
+  if(!interaction.isButton())return false;
+  const id=interaction.customId;
+  return id==="rolepicker:start"||id==="ticket:wizard-start"||id==="ticket:wizard-continue"||
+    id.startsWith("ticket:edit-")||id==="modpanel:sanction"||id==="modpanel:duration"||
+    id==="modpanel:max-count"||id.startsWith("embed:");
+}
 async function handleInteraction(interaction){
+  if(interaction.isRepliable()&&!opensModal(interaction))await startWorking(interaction);
   if(interaction.isChatInputCommand()){
     if(interaction.commandName.startsWith("ticket-"))return tickets.handle(interaction);
     if(interaction.commandName==="moderation-settings")return moderation.handle(interaction);

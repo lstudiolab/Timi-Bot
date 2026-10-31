@@ -12,13 +12,15 @@ export function textInput(id,label,value="",style=TextInputStyle.Short,required=
 export function modal(id,title,inputs){
   return new ModalBuilder().setCustomId(id).setTitle(title).addComponents(...inputs.map(input=>row(input)));
 }
+export async function startWorking(interaction){
+  if(interaction.deferred||interaction.replied)return;
+  workStarted.set(interaction,Date.now());
+  await interaction.deferReply({ephemeral:true});
+  await interaction.editReply({content:"Working…",components:[],embeds:[],allowedMentions:{parse:[]}});
+}
 export async function respond(interaction,content,components=[],embeds=[]){
   const payload={content:content??null,components,embeds,allowedMentions:{parse:[]}};
-  if(!interaction.deferred&&!interaction.replied){
-    workStarted.set(interaction,Date.now());
-    await interaction.deferReply({ephemeral:true});
-    await interaction.editReply({content:"Working…",components:[],embeds:[],allowedMentions:{parse:[]}});
-  }
+  if(!interaction.deferred&&!interaction.replied)await startWorking(interaction);
   const started=workStarted.get(interaction);
   if(started){
     const remaining=minimumWorkMs-(Date.now()-started);

@@ -184,7 +184,7 @@ export class Tickets {
       if(id==="ticket:close") return respond(i,"Are you sure you want to close this ticket?",[row(button("ticket:confirm-close","Yes, close it",ButtonStyle.Danger),button("ticket:cancel-close","Cancel"))]);
       if(id==="ticket:cancel-close") return respond(i,"Ticket closure cancelled.");
       const key=g.id+":"+ch.id; if(this.closing.has(key)) return deny(i,"This ticket is already closing.");
-      this.closing.add(key); await i.deferReply({ephemeral:true});
+      this.closing.add(key);
       try {
         try { await this.transcript(g,ch); } catch(e) { this.logger.warn("Ticket transcript failed:",e.message); }
         await this.log(g,`Ticket closed. Channel: <#${ch.id}>. Closed by <@${i.user.id}>.`);
