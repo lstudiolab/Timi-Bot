@@ -52,3 +52,42 @@ export function hasManager(interaction) {
 export function isOwner(member) {
   return Boolean(member?.guild?.ownerId && member.id === member.guild.ownerId);
 }
+
+
+// Render placeholders in any server-owner-authored message or embed text.
+// Missing context leaves the original placeholder intact instead of inserting "undefined".
+export function renderTemplate(template, context = {}) {
+  const guild = context.guild || context.member?.guild || null;
+  const member = context.member || null;
+  const user = context.user || member?.user || null;
+  const channel = context.channel || null;
+  const botUser = context.client?.user || context.bot || null;
+  const values = {
+    user: user?.id ? `<@${user.id}>` : null,
+    username: user?.username ?? null,
+    user_tag: user?.tag ?? (user?.username && user?.discriminator && user.discriminator !== "0" ? `${user.username}#${user.discriminator}` : user?.username ?? null),
+    user_id: user?.id ?? null,
+    server: guild?.name ?? null,
+    server_id: guild?.id ?? null,
+    member_count: guild?.memberCount ?? null,
+    channel: channel?.id ? `<#${channel.id}>` : null,
+    channel_name: channel?.name ?? null,
+    owner: guild?.ownerId ? `<@${guild.ownerId}>` : null,
+    owner_id: guild?.ownerId ?? null,
+    bot: botUser?.id ? `<@${botUser.id}>` : null,
+    bot_name: botUser?.username ?? null,
+    date: new Date().toLocaleDateString("en-GB", { timeZone: "UTC" }),
+    time: new Date().toLocaleTimeString("en-GB", { timeZone: "UTC" }),
+    timestamp: Math.floor(Date.now() / 1000)
+  };
+  return String(template ?? "").replace(/\\{([a-z][a-z0-9_]*)\\}/gi, (match, key) => {
+    const value = values[key.toLowerCase()];
+    return value === null || value === undefined ? match : String(value);
+  });
+}
+
+export const TEMPLATE_PLACEHOLDERS = Object.freeze([
+  "{user}", "{username}", "{user_tag}", "{user_id}", "{server}", "{server_id}",
+  "{member_count}", "{channel}", "{channel_name}", "{owner}", "{owner_id}",
+  "{bot}", "{bot_name}", "{date}", "{time}", "{timestamp}"
+]);
