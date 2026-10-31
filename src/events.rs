@@ -1,12 +1,20 @@
 async fn report_interaction_error(s:&State,id:&str,token:&str,error:anyhow::Error){
     error!("Interaction {id} failed: {error:#}");
-    // The callback result may be ambiguous if Discord accepted it but the
-    // HTTP response was lost. Never issue another response or edit the source.
-    if s.take_callback_attempt(id) {
-        warn!("Skipping a second interaction response for {id}; an initial callback was already attempted.");
+    let message="Timi could not complete that action. Check the bot's permissions, role hierarchy, and logs.";
+    // A confirmed acknowledgement allows a safe follow-up edit.
+    if s.take_callback_acknowledged(id) {
+        if let Err(edit_error)=s.edit_original(token,message).await {
+            warn!("Could not show the post-acknowledgement error for interaction {id}: {edit_error:#}");
+        }
+        s.clear_callback_attempt(id);
         return;
     }
-    let message="Timi could not complete that action. Check the bot's permissions, role hierarchy, and logs.";
+    // An uncertain callback must never be replayed: Discord may have consumed it.
+    if s.take_callback_attempt(id) {
+        warn!("Skipping a second initial response for {id}; the acknowledgement outcome was not confirmed.");
+        s.clear_callback_attempt(id);
+        return;
+    }
     if let Err(reply_error)=s.reply(id,token,message,true).await {
         warn!("Could not send the interaction error response for {id}: {reply_error:#}");
     }

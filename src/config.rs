@@ -219,7 +219,8 @@ struct Runtime {
     persist_pending:bool,
 }
 struct State {
-    config:Config, http:HttpClient, store:Mutex<Store>, runtime:Mutex<Runtime>, callback_attempts:Mutex<HashSet<String>>,
+    config:Config, http:HttpClient, store:Mutex<Store>, runtime:Mutex<Runtime>,
+    callback_attempts:Mutex<HashSet<String>>, callback_acknowledged:Mutex<HashSet<String>>,
 }
 impl State {
     fn new(config:Config)->Result<Arc<Self>> {
@@ -233,7 +234,7 @@ impl State {
             info!("Imported legacy Timi JSON settings and recovery records into data/timi.json.");
         }
         Ok(Arc::new(Self{config,http:HttpClient::builder().user_agent("TimiBot/2.0").build()?,
-            store:Mutex::new(store),runtime:Mutex::new(Runtime::default()),callback_attempts:Mutex::new(HashSet::new())}))
+            store:Mutex::new(store),runtime:Mutex::new(Runtime::default()),callback_attempts:Mutex::new(HashSet::new()),callback_acknowledged:Mutex::new(HashSet::new())}))
     }
     fn persist(&self)->Result<()> {
         let data={let s=self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;serde_json::to_vec_pretty(&*s)?};
@@ -294,6 +295,7 @@ impl State {
         {let mut s=self.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;f(s.members.entry(format!("{g}:{u}")).or_default());}self.persist()
     }
     async fn api(&self,method:Method,path:&str,body:Option<Value>)->Result<Value> {
+        let retryable=method==Method::GET||method==Method::PUT||method==Method::PATCH||method==Method::DELETE;
         for attempt in 0..=5u32 {
             let mut req=self.http.request(method.clone(),format!("{API}{path}"))
                 .header("Authorization",format!("Bot {}",self.config.token));
@@ -302,7 +304,7 @@ impl State {
             let status=response.status();
             let text=response.text().await.unwrap_or_default();
             if status==StatusCode::TOO_MANY_REQUESTS {
-                if attempt==5{bail!("Discord API rate limit persisted after retries at {path}.");}
+                if !retryable || attempt==5{bail!("Discord API rate limit at {path} ({}): {}",status,text.chars().take(600).collect::<String>());}
                 let retry=serde_json::from_str::<Value>(&text).ok()
                     .and_then(|v|v.get("retry_after").and_then(Value::as_f64))
                     .unwrap_or(1.0).clamp(0.25,30.0);
@@ -310,7 +312,7 @@ impl State {
                 sleep(Duration::from_secs_f64(retry)).await;
                 continue;
             }
-            if status.is_server_error() && attempt<3 {
+            if retryable && status.is_server_error() && attempt<3 {
                 let delay=Duration::from_millis(500u64.saturating_mul(2u64.pow(attempt)));
                 warn!("Discord API returned {status} at {path}; retrying.");
                 sleep(delay).await;
@@ -325,12 +327,27 @@ impl State {
         bail!("Discord API request exhausted retries at {path}.")
     }
     fn take_callback_attempt(&self,id:&str)->bool { self.callback_attempts.lock().map(|mut attempts|attempts.remove(id)).unwrap_or(true) }
-    fn clear_callback_attempt(&self,id:&str) { if let Ok(mut attempts)=self.callback_attempts.lock(){attempts.remove(id);} }
+    fn take_callback_acknowledged(&self,id:&str)->bool { self.callback_acknowledged.lock().map(|mut ids|ids.remove(id)).unwrap_or(false) }
+    fn clear_callback_attempt(&self,id:&str) {
+        if let Ok(mut attempts)=self.callback_attempts.lock(){attempts.remove(id);}
+        if let Ok(mut acknowledged)=self.callback_acknowledged.lock(){acknowledged.remove(id);}
+    }
     async fn callback(&self,id:&str,t:&str,kind:u8,data:Option<Value>)->Result<()> {
         { let mut attempts=self.callback_attempts.lock().map_err(|_|anyhow!("interaction callback lock poisoned"))?;
           if !attempts.insert(id.to_owned()){bail!("Duplicate initial response prevented for Discord interaction {id}.");} }
-        let mut v=json!({"type":kind});if let Some(d)=data{v["data"]=d;}
-        self.api(Method::POST,&format!("/interactions/{id}/{t}/callback"),Some(v)).await?;Ok(())
+        let mut payload=json!({"type":kind});if let Some(d)=data{payload["data"]=d;}
+        // Discord requires the initial acknowledgement within three seconds.
+        // Keep this single-shot and bounded; generic REST retries are unsafe here.
+        let response=self.http.post(format!("{API}/interactions/{id}/{t}/callback"))
+            .timeout(Duration::from_secs(2)).json(&payload).send().await
+            .context("Discord interaction acknowledgement request failed")?;
+        let status=response.status();
+        let body=response.text().await.unwrap_or_default();
+        if !status.is_success() && status!=StatusCode::NO_CONTENT {
+            bail!("Discord interaction acknowledgement returned {status}: {}",body.chars().take(600).collect::<String>());
+        }
+        if let Ok(mut acknowledged)=self.callback_acknowledged.lock(){acknowledged.insert(id.to_owned());}
+        Ok(())
     }
     async fn reply(&self,id:&str,t:&str,text:&str,ephemeral:bool)->Result<()> {
         self.callback(id,t,4,Some(json!({"content":text,"flags":if ephemeral{64}else{0}}))).await
