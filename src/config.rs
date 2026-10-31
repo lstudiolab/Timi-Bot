@@ -210,6 +210,7 @@ struct SpamEntry { id:String, at:i64, content:String, link_count:usize }
 struct Runtime {
     spam:HashMap<String,VecDeque<SpamEntry>>,
     ticket_cooldowns:HashMap<String,i64>,
+    closing_tickets:HashSet<String>,
     join_bursts:HashMap<String,VecDeque<i64>>,
     raid_alert_times:HashMap<String,i64>,
     guild_owners:HashMap<String,String>,
