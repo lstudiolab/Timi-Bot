@@ -23,6 +23,6 @@ export const LIBRARIES = Object.freeze({
   })
 });
 export function normalizeLibraryName(value){
-  const key=String(value||"").trim().toLowerCase().replace(/[\\s_-]/g,"");
+  const key=String(value||"").trim().toLowerCase().replace(/[\s_-]/g,"");
   return Object.keys(LIBRARIES).find(name=>name.toLowerCase()===key)||null;
 }
