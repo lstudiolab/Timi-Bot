@@ -54,7 +54,7 @@ async function coreCommand(i){
  }
 }
 async function handleInteraction(i){
- if(i.isRepliable()&&!opensModal(i))await startWorking(i);
+ if(i.isRepliable()&&!opensModal(i)&&i.customId!=="ticket:confirm-close")await startWorking(i);
  if(i.isChatInputCommand()){
   if(["install-library","uninstall-library","library-list"].includes(i.commandName))return coreCommand(i);
   const required=commandLibrary(i.commandName);if(!required)return;
