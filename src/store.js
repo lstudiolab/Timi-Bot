@@ -3,7 +3,7 @@ import path from "node:path";
 import { fillDefaults } from "./utils.js";
 
 const defaults=()=>({
-  installed_libraries:{},tickets:{},moderation:{},verification:{},members:{},channels:{},messages:{},
+  installed_libraries:{},welcome:{},tickets:{},moderation:{},verification:{},members:{},channels:{},messages:{},
   role_picker_menus:{},role_picker_drafts:{},embeds:{},moderation_cases:{},automod_words:{},pending_bots:{}
 });
 function readJson(file){
