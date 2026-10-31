@@ -137,6 +137,31 @@ export class Moderation {
     }catch(error){this.logger.warn("Automod sanction failed:",error.message);}
     await this.log(guild,`Anti-spam action: ${action}. Automatic warning #${warning} issued to <@${message.author.id}>. Channel: <#${message.channelId}>. Reason: ${reason}.`);
   }
+  async onMessageDelete(message){
+    if(message.partial)message=await message.fetch().catch(()=>null);
+    if(!message?.guild||message.author?.bot)return;
+    await this.log(message.guild,`Message deleted in <#${message.channelId}> by <@!${message.author.id}>. Content: ${(message.content||"(no text content)").slice(0,1200)}`);
+  }
+  async onMessageUpdate(oldMessage,newMessage){
+    if(newMessage.partial)newMessage=await newMessage.fetch().catch(()=>null);
+    if(!newMessage?.guild||newMessage.author?.bot)return;
+    const before=oldMessage.content||"",after=newMessage.content||"";
+    if(before===after)return;
+    await this.log(newMessage.guild,`Message edited in <#${newMessage.channelId}> by <@!${newMessage.author.id}>. Before: ${before.slice(0,600)||"(empty)"} | After: ${after.slice(0,600)||"(empty)"}`);
+  }
+  async onMemberUpdate(oldMember,newMember){
+    const before=new Set(oldMember.roles.cache.keys()),after=new Set(newMember.roles.cache.keys());
+    const added=[...after].filter(id=>!before.has(id)).map(id=>`<@&${id}>`);
+    const removed=[...before].filter(id=>!after.has(id)).map(id=>`<@&${id}>`);
+    const changes=[];
+    if(oldMember.nickname!==newMember.nickname)changes.push(`Nickname: ${oldMember.nickname||"none"} → ${newMember.nickname||"none"}`);
+    if(added.length)changes.push("Roles added: "+added.join(", "));
+    if(removed.length)changes.push("Roles removed: "+removed.join(", "));
+    if(changes.length)await this.log(newMember.guild,`Member update for <@!${newMember.id}>: ${changes.join("; ")}`);
+  }
+  async onBan(guild,user,removed=false){
+    await this.log(guild,`Member ${removed?"unbanned":"banned"}: <@!${user.id}> (${user.tag||user.id}).`);
+  }
   async wordCommand(i){
     if(!await requireManager(i))return;
     const action=i.options.getSubcommand(),phrase=i.options.getString("phrase")?.trim();
