@@ -4,6 +4,39 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
     let opts=v.pointer("/data/options").cloned().unwrap_or(json!([]));
     if g.is_empty(){return s.reply(id,t,"This command can only be used in a server.",true).await;}
     match name{
+        "warn"=>{
+            if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}
+            let target=opt_str(&opts,"member").unwrap_or_default();let reason=opt_str(&opts,"reason").unwrap_or_else(||"No reason provided".into());
+            if !snowflake(&target)||target==u{return s.reply(id,t,"Choose a valid member other than yourself.",true).await;}
+            let mut store=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;let cases=store.moderation_cases.entry(g.clone()).or_default();let case_id=cases.last().and_then(|x|x["id"].as_u64()).unwrap_or(0)+1;
+            cases.push(json!({"id":case_id,"type":"warning","user_id":target,"moderator_id":u,"reason":reason,"created_at":now()}));drop(store);s.persist()?;
+            log_to(s,&g,&s.mods(&g).log_channel_id,&format!("Warning #{case_id}: <@{target}> — {reason} (moderator <@{u}>)")).await;
+            s.reply(id,t,&format!("Warning #{case_id} recorded for <@{target}>."),true).await
+        }
+        "warnings"=>{
+            if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}let target=opt_str(&opts,"member").unwrap_or_default();
+            let cases=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?.moderation_cases.get(&g).cloned().unwrap_or_default();
+            let rows=cases.iter().filter(|x|x["user_id"].as_str()==Some(&target)&&x["type"]=="warning").rev().take(15).map(|x|format!("#{0} — {1} — <t:{2}:R>",x["id"],x["reason"].as_str().unwrap_or("No reason"),x["created_at"].as_i64().unwrap_or(0)/1000)).collect::<Vec<_>>();
+            s.reply(id,t,&if rows.is_empty(){format!("No warnings for <@{target}>.")}else{rows.join("\n")},true).await
+        }
+        "clear-warnings"=>{
+            if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}let target=opt_str(&opts,"member").unwrap_or_default();
+            let mut store=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;let cases=store.moderation_cases.entry(g.clone()).or_default();let before=cases.len();cases.retain(|x|!(x["user_id"].as_str()==Some(&target)&&x["type"]=="warning"));let n=before-cases.len();drop(store);s.persist()?;
+            s.reply(id,t,&format!("Cleared {n} warning(s) for <@{target}>."),true).await
+        }
+        "automod-word"=>{
+            if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}let action=opt_str(&opts,"action").unwrap_or_default();let word=opt_str(&opts,"word").unwrap_or_default().trim().to_lowercase();
+            let mut store=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;let list=store.automod_words.entry(g.clone()).or_default();
+            let result=match action.as_str(){"add"=>{if word.len()<2||word.len()>80{return s.reply(id,t,"Word must be 2–80 characters.",true).await;}if !list.contains(&word){list.push(word.clone());}format!("Added {word} to the blocked-word list.")},"remove"=>{let n=list.len();list.retain(|x|x!=&word);format!("Removed {} entry.",n-list.len())},"list"=>format!("Blocked words: {}",if list.is_empty(){"None".into()}else{list.join(", ")}),_=>"Choose list, add, or remove.".into()};drop(store);s.persist()?;s.reply(id,t,&result,true).await
+        }
+        "lockdown"|"unlockdown"=>{
+            if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}s.defer(id,t).await?;
+            let channels=s.api(Method::GET,&format!("/guilds/{g}/channels"),None).await?;let locked=name=="lockdown";let mut changed=0usize;let bit=1u64<<11;
+            for ch in channels.as_array().into_iter().flatten().filter(|c|matches!(c["type"].as_u64(),Some(0|5|15))){let cid=ch["id"].as_str().unwrap_or("");if cid.is_empty(){continue;}let mut ovs=ch["permission_overwrites"].as_array().cloned().unwrap_or_default();let pos=ovs.iter().position(|o|o["id"].as_str()==Some(&g)&&o["type"].as_u64()==Some(0));
+                if locked{if let Some(i)=pos{let deny=ovs[i]["deny"].as_str().and_then(|x|x.parse::<u64>().ok()).unwrap_or(0)|bit;ovs[i]["deny"]=json!(deny.to_string());}else{ovs.push(json!({"id":g,"type":0,"allow":"0","deny":bit.to_string()}));}}else if let Some(i)=pos{let deny=ovs[i]["deny"].as_str().and_then(|x|x.parse::<u64>().ok()).unwrap_or(0)&!bit;ovs[i]["deny"]=json!(deny.to_string());}
+                if s.api(Method::PATCH,&format!("/channels/{cid}"),Some(json!({"permission_overwrites":ovs}))).await.is_ok(){changed+=1;}}
+            s.edit_original(t,&format!("{} lockdown across {changed} channels.",if locked{"Applied"}else{"Removed"})).await
+        }
         "create-embed"=>{if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to create embeds.",true).await;}
             return s.callback(id,t,9,Some(modal("embed:create","Create an embed",vec![
                 input("name","Embed name (no spaces)","",false,24),input("title","Embed title","",false,256),input("description","Embed description","",true,4000)

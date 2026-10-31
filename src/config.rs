@@ -123,6 +123,8 @@ struct Store {
     #[serde(default)] role_picker_menus:HashMap<String,RolePickerMenu>,
     #[serde(default)] role_picker_drafts:HashMap<String,RolePickerDraft>,
     #[serde(default)] embeds:HashMap<String,SavedEmbed>,
+    #[serde(default)] moderation_cases:HashMap<String,Vec<Value>>,
+    #[serde(default)] automod_words:HashMap<String,Vec<String>>,
 }
 fn migrate_legacy_data(dir:&std::path::Path,store:&mut Store)->Result<bool>{
     fn read(path:&PathBuf)->Option<Value>{fs::read(path).ok().and_then(|b|serde_json::from_slice(&b).ok())}
