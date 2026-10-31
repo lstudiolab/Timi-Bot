@@ -4,60 +4,6 @@ async fn command(s:&Arc<State>,id:&str,t:&str,v:Value)->Result<()>{
     let opts=v.pointer("/data/options").cloned().unwrap_or(json!([]));
     if g.is_empty(){return s.reply(id,t,"This command can only be used in a server.",true).await;}
     match name{
-        "warn"=>{
-            if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}
-            // Record and log actions can require disk and Discord REST requests.
-            // Acknowledge before doing either so the initial response stays inside Discord's deadline.
-            s.defer(id,t).await?;
-            let target=opt_str(&opts,"member").unwrap_or_default();let reason=opt_str(&opts,"reason").unwrap_or_else(||"No reason provided".into());
-            if !snowflake(&target)||target==u{return s.reply(id,t,"Choose a valid member other than yourself.",true).await;}
-            let case_id={
-                let mut store=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;
-                let cases=store.moderation_cases.entry(g.clone()).or_default();
-                let case_id=cases.last().and_then(|x|x["id"].as_u64()).unwrap_or(0)+1;
-                cases.push(json!({"id":case_id,"type":"warning","user_id":target,"moderator_id":u,"reason":reason,"created_at":now()}));
-                case_id
-            };
-            s.persist()?;
-            let log_channel=s.mods(&g).log_channel_id;
-            log_to(s,&g,&log_channel,&format!("Warning #{case_id}: <@{target}> — {reason} (moderator <@{u}>)")).await;
-            s.edit_original(t,&format!("Warning #{case_id} recorded for <@{target}>.")).await
-        }
-        "warnings"=>{
-            if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}
-            s.defer(id,t).await?;
-            let target=opt_str(&opts,"member").unwrap_or_default();
-            let cases=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?.moderation_cases.get(&g).cloned().unwrap_or_default();
-            let rows=cases.iter().filter(|x|x["user_id"].as_str()==Some(&target)&&x["type"]=="warning").rev().take(15).map(|x|format!("#{0} — {1} — <t:{2}:R>",x["id"],x["reason"].as_str().unwrap_or("No reason"),x["created_at"].as_i64().unwrap_or(0)/1000)).collect::<Vec<_>>();
-            s.edit_original(t,&if rows.is_empty(){format!("No warnings for <@{target}>.")}else{rows.join("\n")}).await
-        }
-        "clear-warnings"=>{
-            if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}
-            s.defer(id,t).await?;
-            let target=opt_str(&opts,"member").unwrap_or_default();
-            let n={
-                let mut store=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;
-                let cases=store.moderation_cases.entry(g.clone()).or_default();
-                let before=cases.len();
-                cases.retain(|x|!(x["user_id"].as_str()==Some(&target)&&x["type"]=="warning"));
-                before-cases.len()
-            };
-            s.persist()?;
-            s.edit_original(t,&format!("Cleared {n} warning(s) for <@{target}>.")).await
-        }
-        "automod-word"=>{
-            if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission.",true).await;}
-            s.defer(id,t).await?;
-            let action=opt_str(&opts,"action").unwrap_or_default();let word=opt_str(&opts,"word").unwrap_or_default().trim().to_lowercase();
-            if action=="add"&&(word.len()<2||word.len()>80){return s.reply(id,t,"Word must be 2–80 characters.",true).await;}
-            let result={
-                let mut store=s.store.lock().map_err(|_|anyhow!("store lock poisoned"))?;
-                let list=store.automod_words.entry(g.clone()).or_default();
-                match action.as_str(){"add"=>{if !list.contains(&word){list.push(word.clone());}format!("Added {word} to the blocked-word list.")},"remove"=>{let n=list.len();list.retain(|x|x!=&word);format!("Removed {} entry.",n-list.len())},"list"=>format!("Blocked words: {}",if list.is_empty(){"None".into()}else{list.join(", ")}),_=>"Choose list, add, or remove.".into()}
-            };
-            s.persist()?;
-            s.edit_original(t,&result).await
-        }
         "create-embed"=>{if !manage_guild(&v){return s.reply(id,t,"You need Manage Server permission to create embeds.",true).await;}
             return s.callback(id,t,9,Some(modal("embed:create","Create an embed",vec![
                 input("name","Embed name (no spaces)","",false,24),input("title","Embed title","",false,256),input("description","Embed description","",true,4000)
