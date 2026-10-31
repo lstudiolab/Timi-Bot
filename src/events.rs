@@ -1,18 +1,11 @@
-async fn report_interaction_error(s:&State,id:&str,token:&str,error:anyhow::Error){
-    // Interaction handlers own their user-facing responses. A global fallback
-    // reply can create a second initial response or overwrite a useful message
-    // after a handler has already acknowledged Discord and continued its work.
-    // Keep the detailed failure in logs; never inject a generic message.
+async fn report_interaction_error(s:&State,id:&str,_token:&str,error:anyhow::Error){
+    // A deferred interaction already displays Discord's native
+    // "Timi is thinking..." state. Do not replace it with a generic error:
+    // that causes a visible error flash before a later task can publish its
+    // actual result. Action handlers are responsible for user-facing errors.
     error!("Interaction {id} failed: {error:#}");
-    let acknowledged=s.take_callback_acknowledged(id);
-    let attempted=s.take_callback_attempt(id);
-    if acknowledged {
-        if let Err(reply_error)=s.edit_original(token,"Timi could not complete that action. Please try again.").await {
-            warn!("Could not send the fallback response for interaction {id}: {reply_error:#}");
-        }
-    } else if attempted {
-        tracing::debug!("Interaction {id} failed before Discord confirmed its initial response.");
-    }
+    s.take_callback_acknowledged(id);
+    s.take_callback_attempt(id);
     s.clear_callback_attempt(id);
 }
 
